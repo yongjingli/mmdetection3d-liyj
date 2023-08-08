@@ -1,0 +1,42 @@
+#******************************************************************************
+#* Copyright (c) 2018 - Present, XMotors.ai, Inc. and its Affiliates.
+#*****************************************************************************/
+#Makefile for QNX version of onnx2trt tool, library and sample
+#Create by Zhiwen Cai @ 2019.4.10
+
+#make -f Makefile_QNX 
+
+#if need clean: 
+#   make -f Makefile_QNX clean
+
+include ./Makefile.inc
+
+CXX                	?= $(QNX_HOST)/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++
+
+CPPFLAGS := -Wall -Wno-deprecated-declarations -Wno-pointer-arith  -Wno-unused-variable -Wno-sign-compare -fPIC  -I. -D_QNX_SOURCE -lc -stdlib=libstdc++
+CPPFLAGS += -std=c++14  -O3  #-g
+LDFLAGS  := $(NV_PLATFORM_SDK_LIB) $(NV_PLATFORM_TARGET_LIB) $(NV_PLATFORM_LDFLAGS) 
+
+LDLIBS += -lsocket
+LDLIBS += -lc++ 
+
+CUDA_INSTALL_DIR = /opt/toolchains/cuda/targets/aarch64-qnx
+NVCC= /opt/toolchains/cuda-10.2/bin/nvcc -m64 -ccbin $(CXX)
+INCPATHS +=-I$(CUDA_INSTALL_DIR)/include  
+COMMON_CUFLAGS +=  $(INCPATHS) --std=c++14 -cudart static -lineinfo  --expt-extended-lambda -arch=sm_72
+CUFLAGS += $(COMMON_CUFLAGS)
+CPPFLAGS +=-I$(CUDA_INSTALL_DIR)/include
+OBJS= half_convert.o face_detection.o landmark.o inference_tool.o dms_cuda_utils.o dms_pipeline.o main.o
+
+dms_tool:$(OBJS)
+	$(CXX) $(CPPFLAGS) $(LDLIBS)  -o dms_tool $(OBJS) \
+	           -lcudart -lnppc -lnppig_static -lnppicc_static \
+			   -L$(CUDA_INSTALL_DIR)/lib64 -L$(CUDA_INSTALL_DIR)/lib -L$(CUDA_INSTALL_DIR)/lib/stubs \
+			    $(LDLIBS) 
+%.o:%.cpp
+	$(CXX) $(CPPFLAGS) -o $@ -c $<
+
+dms_cuda_utils.o:dms_cuda_utils.cu
+	$(NVCC) $(CUFLAGS) -c dms_cuda_utils.cu -o dms_cuda_utils.o
+clean:
+	rm ./*.o dms_tool

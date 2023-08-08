@@ -1,0 +1,42 @@
+{
+    "file_name": "",
+    "objects": [
+        {
+            "BL": "off",
+            "MCDO": true,
+            "RP2EC": {
+                "center": true,
+                "far_left": false,
+                "far_right": false,
+                "left": false,
+                "right": false,
+                "unknown": false
+            },
+            "TSL": "off",
+            "category": "car",
+            "is_cropped": false,
+            "poly": [
+                {
+                    "x": -1,
+                    "y": -1
+                },
+                {
+                    "x": -1,
+                    "y": -1
+                },
+                {
+                    "x": -1,
+                    "y": -1
+                }
+            ],
+            "bbox": {
+                "ymin": 0,
+                "xmin": 0,
+                "ymax": 100,
+                "xmax": 100
+            },
+            "confidence": 0.5
+        }
+    ],
+    "task": "object_detection"
+}

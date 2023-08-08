@@ -1,5 +1,5 @@
 from typing import Optional, Union
-
+import torch
 from torch import nn
 
 from mmdet3d.models import Base3DSegmentor
@@ -60,7 +60,8 @@ class TPVFormer(Base3DSegmentor):
         img_feats = self.extract_feat(batch_inputs['imgs'])
         tpv_queries = self.encoder(img_feats, batch_data_samples)
         seg_logits = self.decode_head.predict(tpv_queries, batch_data_samples)
-        seg_preds = [seg_logit.argmax(dim=1) for seg_logit in seg_logits]
+        # seg_preds = [seg_logit.argmax(dim=1) for seg_logit in seg_logits]
+        seg_preds = [torch.transpose(seg_logit, 1, 0) for seg_logit in seg_logits]  # no argmax
 
         return self.postprocess_result(seg_preds, batch_data_samples)
 

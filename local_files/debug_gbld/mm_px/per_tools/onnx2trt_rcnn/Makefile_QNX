@@ -1,0 +1,150 @@
+#******************************************************************************
+#* Copyright (c) 2018 - Present, XMotors.ai, Inc. and its Affiliates.
+#*****************************************************************************/
+#Makefile for QNX version of onnx2trt tool, library and sample
+#Create by Zhiwen Cai @ 2019.4.10
+#make -f Makefile_QNX third_partys
+#make -f Makefile_QNX 
+#make -f Makefile_QNX samples
+#if need clean: 
+#   make -f Makefile_QNX clean
+#if need clean protobuf & onnx-tensorrt : 
+#   make -f Makefile_QNX clean_third_partys
+
+QNX_BASE ?= /opt/toolchains/qnx700
+NV_TOPDIR ?= ../../../../../
+
+include ../../Makefile.inc
+
+EXTRA_DIRECTORIES=onnx-tensorrt plugin
+
+OUTNAME_RELEASE 	?= onnx2trt_rcnn
+OUTDIR 				?= bin
+OBJDIR    			=$(OUTDIR)/chobj
+
+AT=@
+AR = ar cr
+ECHO = @echo
+SHELL=/bin/sh
+
+CUDA_INSTALL_DIR  	?= /opt/toolchains/cuda/targets/aarch64-qnx/
+CUDNN_INSTALL_DIR  	?= /opt/toolchains/targetfs/usr/local/cuda/
+CUDA_LIBDIR			=$(CUDA_INSTALL_DIR)/lib
+CUDNN_LIBDIR		=$(CUDNN_INSTALL_DIR)/lib
+TENSORRT_INCDIR?= /opt/toolchains/TensorRT/include
+TENSORRT_LIBDIR?= /opt/toolchains/TensorRT/targets/aarch64-unknown-nto-qnx/lib
+
+CXX                	?= $(QNX_HOST)/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++
+CUCC 				?= /opt/toolchains/cuda/bin/nvcc -m64 -ccbin $(CXX)
+
+INCPATHS += -Isrc -Iplugin -Ionnx-tensorrt -Ithird_party -Ithird_party/protobuf/include
+INCPATHS +=-I"$(CUDA_INSTALL_DIR)/include"  -I"$(CUDNN_INSTALL_DIR)/include"  -I$(TENSORRT_INCDIR) 
+LIBPATHS +=-L"$(CUDA_LIBDIR)"  -L"$(CUDA_LIBDIR)/stubs" -L"$(CUDNN_LIBDIR)" -L"$(TENSORRT_LIBDIR)" 
+GENCODES = -gencode arch=compute_72,code=sm_72 --default-stream per-thread 
+COMMON_FLAGS += -DCUDA_API_PER_THREAD_DEFAULT_STREAM
+
+COMMON_FLAGS += $(INCPATHS) -DONNX_NAMESPACE=onnx2trt_onnx -DONNX_API="" -Wall -Wno-deprecated-declarations -Wno-pointer-arith -std=c++11 -D_QNX_SOURCE -lc -stdlib=libstdc++ -O3 -DNDEBUG -fPIC 
+COMMON_CUFLAGS += $(INCPATHS) --std=c++11 -cudart static --expt-extended-lambda $(GENCODES) --Wno-deprecated-declarations # -lineinfo -g 
+
+STRIP= ${QNX_HOST}/usr/bin/aarch64-unknown-nto-qnx7.0.0-strip
+#COMMON_LIBS += -pthread  -lcudnn -lnvinfer -lnvinfer_plugin  -lnppc -lnppig_static -lnpps 
+COMMON_LIBS +=     -lstdc++ \
+                   -lcuda -lcublas -lcudart -lnppc -lnpps \
+                   -lnppig_static -lnppitc_static -lnppif_static -lnppist_static \
+                   -L/usr/local/cuda/dl/targets/aarch64-qnx/lib64 \
+                   -lcudnn \
+                   -lnvinfer \
+                   -L/opt/toolchains/qnx700/target/qnx7/aarch64le/ 
+                   
+COMMON_LD_FLAGS += -Wl,--unresolved-symbols=ignore-in-shared-libs -Wl,-rpath=/usr/local/cuda/lib $(LIBPATHS)
+
+LIBS  = $(COMMON_LIBS) -lgomp third_party/protobuf/lib/libprotobuf.a
+OBJS   =$(patsubst %.cpp, $(OBJDIR)/%.o, $(wildcard *.cpp $(addsuffix /*.cpp, $(EXTRA_DIRECTORIES))))
+CUOBJS =$(patsubst %.cu, $(OBJDIR)/%.o, $(wildcard *.cu $(addsuffix  /*.cu, $(EXTRA_DIRECTORIES))))
+OBJS += $(OBJDIR)/src/conv_relu.o $(OBJDIR)/src/onnx2trt.o $(OBJDIR)/src/onnx2trt_lib.o
+LIBOBJS =   $(CUOBJS) $(OBJDIR)/onnx-tensorrt/NvOnnxParserRuntime.o \
+            $(OBJDIR)/onnx-tensorrt/plugin.o                        \
+            $(OBJDIR)/onnx-tensorrt/InstanceNormalization.o         \
+            $(OBJDIR)/onnx-tensorrt/PluginFactory.o                 \
+            $(OBJDIR)/onnx-tensorrt/builtin_plugins.o               \
+            $(OBJDIR)/plugin/maskrcnn_roi.o $(OBJDIR)/src/conv_relu.o $(OBJDIR)/src/onnx2trt_lib.o
+
+CFLAGS=$(COMMON_FLAGS)
+CFLAGSD=$(COMMON_FLAGS) -g
+LFLAGS=$(COMMON_LD_FLAGS)
+
+CUFLAGSD += $(COMMON_CUFLAGS) -g
+CUFLAGS += $(COMMON_CUFLAGS)
+
+all: release lib liblite samples
+
+release : $(OUTDIR)/$(OUTNAME_RELEASE)
+	$(ECHO) Build $@ $^ success
+	
+$(OUTDIR)/$(OUTNAME_RELEASE) : $(OBJS) $(CUOBJS)
+	$(ECHO) Linking: $@
+	$(AT)$(CXX) -o $@ $^ $(LFLAGS) -Wl,--start-group $(LIBS) -Wl,--end-group
+
+third_partys:
+	$(AT)cd third_party && chmod 777 build_third_party.sh && CROSS_COMPLE=$(CROSSBIN) ./build_third_party.sh && cd ..
+
+clean_third_partys:
+	$(ECHO) Cleaning third_partys ...
+	$(AT)-rm -rf onnx-tensorrt third_party/protobuf third_party/protobuf-3.5.1
+
+samples: $(OUTDIR)/test_models $(OUTDIR)/test_multi_models
+	$(ECHO) Build $@ $^ success
+	
+$(OUTDIR)/test_models: sample/maskrcnn.cpp
+	$(CXX) sample/maskrcnn.cpp -o $@ $(CFLAGS) -O3 -g 	
+
+$(OUTDIR)/test_multi_models: sample/maskrcnn_mulit_models.cpp
+	$(AT)$(CXX) sample/maskrcnn_mulit_models.cpp -o $@ $(CFLAGS) -O3 -g
+
+lib: $(OUTDIR)/libonnxtrt.so
+	$(ECHO) Build $@ $^ success
+		
+$(OUTDIR)/libonnxtrt.so: $(LIBOBJS) 
+	$(ECHO) "Linking: $^ --> $@ $(OUTDIR)/libonnxtrt.so"
+	$(ECHO) "{\n global: *Engine;\n local: *;\n };\n" > /tmp/libexport.txt
+	$(AT)$(CXX) -shared -Wl,-soname,libonnxtrt.so -fPIC -o $(OUTDIR)/libonnxtrt.so $^ $(LFLAGS) \
+			-Wl,--start-group $(COMMON_LIBS) -Wl,--end-group -Wl,--version-script=/tmp/libexport.txt
+	$(AT)${STRIP} --strip-all $(OUTDIR)/libonnxtrt.so
+	$(AT)-rm -rf /tmp/libexport.txt
+
+liblite: $(OBJDIR)/src/onnx2trt_lite.o 
+	$(ECHO) "Linking: $^ --> $@ $(OUTDIR)/libonnxtrt_lite.so"
+	$(ECHO) "{\n global: *Engine;\n local: *;\n };\n" > /tmp/libexport.txt
+	$(AT)$(CXX) -shared -Wl,-soname,libonnxtrt_lite.so -fPIC -o $(OUTDIR)/libonnxtrt_lite.so $^ $(LFLAGS) \
+			-Wl,--start-group $(LIBS) -Wl,--end-group -Wl,--version-script=/tmp/libexport.txt
+	$(AT)${STRIP} --strip-all $(OUTDIR)/libonnxtrt_lite.so
+	$(AT)-rm -rf /tmp/libexport.txt
+	
+libempty: $(OBJDIR)/src/onnx2trt_empty.o 
+	$(ECHO) "Linking: $^ --> $@ $(OUTDIR)/libonnxtrt_empty.so"
+	$(AT)$(CXX) -shared -Wl,-soname,libonnxtrt_empty.so -fPIC -o $(OUTDIR)/libonnxtrt_empty.so $^ \
+			-Wl,-rpath=/usr/local/cuda/lib $(LIBPATHS)  -lnvinfer
+	
+######################################################################### CPP	
+$(OBJDIR)/%.o: %.cpp
+	$(AT)if [ ! -d $(OBJDIR) ]; then mkdir -p $(OBJDIR); fi
+	$(AT)if [ ! -d $(OBJDIR)/src ]; then mkdir -p $(OBJDIR)/src; fi
+	$(AT)$(foreach XDIR,$(EXTRA_DIRECTORIES), if [ ! -d $(OBJDIR)/$(XDIR) ]; then mkdir -p $(OBJDIR)/$(XDIR); fi;) :
+	$(call make-depend,$<,$@,$(subst .o,.d,$@))
+	$(ECHO) Compiling: $<
+	$(AT)$(CC) $(CFLAGS) -c -o $@ $<
+
+
+######################################################################### CU
+$(OBJDIR)/%.o: %.cu
+	$(AT)if [ ! -d $(OBJDIR) ]; then mkdir -p $(OBJDIR); fi
+	$(foreach XDIR,$(EXTRA_DIRECTORIES), if [ ! -d $(OBJDIR)/$(XDIR) ]; then mkdir -p $(OBJDIR)/$(XDIR); fi;) :
+	$(call make-depend,$<,$@,$(subst .o,.d,$@))
+	$(ECHO) Compiling CUDA release: $<
+	$(AT)$(CUCC) $(CUFLAGS) -c -o $@ $<
+
+
+clean:
+	$(ECHO) Cleaning...
+	$(AT)-rm -rf $(OBJDIR) $(DOBJDIR) $(OUTDIR)/$(OUTNAME_RELEASE) $(OUTDIR)/$(OUTNAME_DEBUG)
+

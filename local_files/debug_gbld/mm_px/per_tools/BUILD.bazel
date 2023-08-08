@@ -1,0 +1,17 @@
+package(default_visibility = ["//visibility:public"])
+
+load("@xpilot_build_tools//:globals.bzl", "global_definitions")
+load("@xpilot_build_tools//rules/cuda:cuda_compile.bzl", "cuda_library")
+
+global_definitions()
+
+# This is dead target and it is blocking clang-tidy analysis
+# cc_binary(
+#     name = "fsd_synchronizer",
+#     srcs = ["fsd_synchronizer.cpp"],
+#     deps = [
+#         "@com_github_gflags_gflags//:gflags",
+#         "@xpilot_glog//:glog",
+#         "@xos//services/dds_forwarder:dds_forwarder_lib"
+#     ],
+# )

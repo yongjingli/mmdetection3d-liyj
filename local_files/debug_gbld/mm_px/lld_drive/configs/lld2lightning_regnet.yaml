@@ -1,0 +1,288 @@
+Backbone:
+  type: RegNet
+  name: 800MF
+  use_csp_layer0: True
+  #freeze:  ["layer0", "layer1"]
+  #load: ["layer0", "layer1"]
+  layers:
+    layer0: [12, 64, 1, 2]
+    layer1: [64, 64, 3, 1]
+
+Global:
+  cam_trained: [ cam0, cam1, cam2]
+  image_per_gpu: 96
+  workers_per_gpu: 24
+  switch_batchnorm: {cam0: 0, cam1: 0, cam2: 0}
+  use_wandb: False
+XData:
+  version: '2.0'
+  config: {data_dir: /dataset/downloader_v2/repository, data_cache: /dataset, allow_use_cache_only: false}
+Train:
+  max_iteration: 90000
+  validate_every: 5000
+  log_every: 200
+  visualize_every: 2000000000
+  max_visu_img_num: 10
+  optimizer:
+    type: SGD
+    weight_decay: 0.0001
+    momentum: 0.9
+    grad_bounds: {mod: 2.0, lld: 2.0, bd: 0.5, ds: 0.5, tfl: 0.5, sr: 0.5, tl: 0.5,
+      rsm2: 0.4, tsr: 0.5, ihb: 0.1, vp: 0.1, sod: 0.5, adkpmod: 2.0}
+  lr: {lr_scheduler: warmup_cos, lr_iterations: 90000, multiplier: 1000, warmup_iterations: 2000,
+    lr1: 0.00025}
+Image:
+  int8_pipeline: true
+  spatial2channel: true
+  image_resize_factor: 4.0
+  image_width: 457
+  image_height: 237
+  image_channel: 12
+  original_image_shapes:
+    cam0: [ 474, 914, 3 ]
+    cam1: [ 474, 914, 3 ]
+    cam2: [ 474, 914, 3 ]
+    cam3: [ 480, 640, 3 ]
+    cam4: [ 480, 640, 3 ]
+    cam5: [ 480, 640, 3 ]
+    cam6: [ 480, 640, 3 ]
+    e38:
+      cam0: [1080, 1920, 3]
+      cam2: [1080, 1920, 3]
+      cam3: [775, 968, 3]
+      cam4: [775, 968, 3]
+      cam5: [775, 968, 3]
+      cam6: [775, 968, 3]
+      cam7: [474, 914, 3]
+  e38_crop_method:
+    cam0: {top: 132, bottom: 0, left: 46, right: 46, resize: 2.0}
+    cam2: {top: 426, bottom: 180, left: 503, right: 503, resize: 1.0}
+    cam3: {top: 55, bottom: 0, left: 4, right: 4, resize: 1.5}
+    cam4: {top: 55, bottom: 0, left: 4, right: 4, resize: 1.5}
+    cam5: {top: 55, bottom: 0, left: 4, right: 4, resize: 1.5}
+    cam6: {top: 55, bottom: 0, left: 4, right: 4, resize: 1.5}
+# Camera setting
+Camera:
+  front_cam: [cam0, cam1, cam2]
+  side_cam: [cam3, cam4, cam5, cam6]
+  intrinsic:
+    cam1: {h: 948.0, w: 1828.0, cx: 908.307739, cy: 480.59314, fx: 2041.6666666667,
+      fy: 2041.6666666667}
+    cam2: {h: 948.0, w: 1828.0, cx: 908.307739, cy: 480.59314, fx: 2041.6666666667,
+      fy: 2041.6666666667}
+    cam0: {h: 948.0, w: 1828.0, cx: 902.767151, cy: 485.078125, fx: 3687.380952381,
+      fy: 3687.380952381}
+    cam3: {h: 960.0, w: 1280.0, cx: 640.067505, cy: 481.062408, fx: 597.619047619,
+      fy: 597.619047619}
+    cam4: {h: 960.0, w: 1280.0, cx: 637.998291, cy: 481.723541, fx: 592.619047619,
+      fy: 592.619047619}
+    cam5: {h: 960.0, w: 1280.0, cx: 641.939697, cy: 480.59436, fx: 587.619047619,
+      fy: 587.619047619}
+    cam6: {h: 960.0, w: 1280.0, cx: 642.408081, cy: 481.824768, fx: 587.619047619,
+      fy: 587.619047619}
+Tasks:
+  LLD2LIGHTNING:
+    group: "group0"
+    frequency: 1.0
+    weight: 1.0
+    grad_bounds: 2.0
+    image_label_ratio: 0.5
+    Augmentations:
+      RandomBrightnessContrast:
+        brightness_limit: [-0.019, 0.058]
+        contrast_limit: [-0.15, 0.1]
+      GaussNoise:
+        var_limit: [162.5, 162.5]
+        per_channel: true
+    backbone_feat_id: [ 2,1 ]
+    Head:
+      lane_head:
+        detach_backbone: False
+        backbone_id: 0
+        crop_layer_config: {
+          crop_h: [ 5 ],
+          crop_w: [ 0 ],
+          mode: "index"
+        }
+        buffer_layers: [
+          {
+            layer_types: [ "conv", "norm", "acti" ],
+            conv_config:
+              {
+                in_channels: 288,
+                out_channels: 128,
+                kernel_size: 3,
+                stride: 1,
+                padding: 1
+              },
+            norm_config: {
+              num_features: 128
+            }
+          },
+          {
+            layer_types: [ "conv", "norm", "acti" ],
+            conv_config:
+              {
+                in_channels: 128,
+                out_channels: 64,
+                kernel_size: 3,
+                stride: 1,
+                padding: 1
+              },
+            norm_config: {
+              num_features: 64
+            }
+          }
+        ]
+        linear_layers: [
+          {
+            layer_types: [ "linear" ],
+            linear_config: {
+              in_features: 18560,
+              out_features: 1745
+            }
+          }
+        ]
+      transition_head:
+        detach_backbone: False
+        backbone_id: 1
+        crop_layer_config: {
+          crop_h: [ 10,-4 ],
+          crop_w: [ 14,-14 ],
+          mode: "index"
+        }
+        buffer_layers: [
+          {
+            layer_types: [ "conv", "norm", "acti" ],
+            conv_config:
+              {
+                in_channels: 128,
+                out_channels: 64,
+                kernel_size: 3,
+                stride: 1,
+                padding: 1
+              },
+            norm_config: {
+              num_features: 64
+            }
+          },
+          {
+            layer_types: [ "conv", "norm", "acti" ],
+            conv_config:
+              {
+                in_channels: 64,
+                out_channels: 32,
+                kernel_size: 3,
+                stride: 1,
+                padding: 1
+              },
+            norm_config: {
+              num_features: 32
+            }
+          }
+        ]
+        linear_layers: [
+          {
+            layer_types: [ "linear" ],
+            linear_config: {
+              in_features: 15360,
+              out_features: 20
+            }
+          }
+        ]
+
+    attributes:
+      Lane:
+        bits_number: 1740
+        bits_weights: 1.0
+        sub_attributes:
+          LaneBool:
+            bits_number: 6
+            bits_weights: 1.25
+          LineBool:
+            bits_number: 6
+            bits_weights: 1.25
+          LaneRegress:
+            bits_number: 2
+            bits_weights: 0.05
+          LineType:
+            bits_number: 28
+            bits_weights: 2.5
+          LineShape:
+            bits_number: 132
+            bits_weights:
+              position: 5
+              gradient: 120
+      GlobalInfo:
+        bits_number: 5
+        bits_weights: 1
+      TransitionBit:
+        bits_number: 20
+        bits_weights: 2.5
+    PostProcessing: { }
+    PreProcessing:
+      num_lanes: 10
+      predict_transition_branch: True
+      step_y: 2.5
+      num_points_each_line: 64
+      transition_output: 20
+      ignore_list: [ ]
+      extend_points_weight: 0.2
+      reanno_e38: True
+      reanno_config: [250, 20]
+      force_merge_pos_weight: 2.0
+      softwide_out_of_image: False
+    datasets:
+      training:
+      - label_task_name: label_lld_merge_nls
+        dataset_name: driving_train
+        vehicle_model: ['21','40']
+        camera_id: cam0
+        status: [6, 9]
+        data_upsampler_config:
+          upsample_files_root: /workspace/ruig@xiaopeng.com/lld/upsample/upsample_0628/cam0_e38
+          upsample_cases: [fork, split]
+          upsample_ratios: [30, 5]
+        ratio: 0.1
+      - label_task_name: label_lld_merge_nls
+        dataset_name: driving_train
+        vehicle_model: ['21','40']
+        camera_id: cam2
+        status: [6, 9]
+        data_upsampler_config:
+          upsample_files_root: /workspace/ruig@xiaopeng.com/lld/upsample/upsample_0628/cam2_e38
+          upsample_cases: [fork, split]
+          upsample_ratios: [30, 5]
+        ratio: 0.1
+      - label_task_name: label_lld_merge_nls
+        dataset_name: driving_train
+        vehicle_model: ['20', '30']
+        camera_id: cam0
+        data_upsampler_config:
+          upsample_files_root: /workspace/ruig@xiaopeng.com/lld/upsample/upsample_0628/cam0
+          upsample_cases: [fork, split,zebra, lld_merge_in]
+          upsample_ratios: [30, 5, 3, 3]
+        status: [6, 9]
+        ratio: 0.3
+      - label_task_name: label_lld_merge_nls
+        dataset_name: driving_train
+        vehicle_model: ['20', '30']
+        camera_id: cam1
+        status: [6, 9]
+        data_upsampler_config:
+          upsample_files_root: /workspace/ruig@xiaopeng.com/lld/upsample/upsample_0628/cam1
+          upsample_cases: [fork, split,zebra, lld_merge_in]
+          upsample_ratios: [30, 5, 3, 3]
+        ratio: 0.5
+      validation:
+      - label_task_name: label_lld_merge_nls
+        dataset_name: driving_test
+        vehicle_model: ['40']
+        camera_id: cam0
+        status: [6, 9]
+      - label_task_name: label_lld_merge_nls
+        dataset_name: driving_test
+        vehicle_model: ['40']
+        camera_id: cam2
+        status: [6, 9]
+    corner_cases: ["llde38wide","llde38split","llde38obstacle","llde38fishbone","llde38ramp"]
