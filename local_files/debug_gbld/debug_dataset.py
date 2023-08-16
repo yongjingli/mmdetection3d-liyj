@@ -399,7 +399,7 @@ def debug_dataset(cfg):
 
 
 if __name__ == '__main__':
-    config_path = "./projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
+    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config.py"
     # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
 
     # 用于加载数据的测试调试,可用于验证数据加载和数据增强的正确性

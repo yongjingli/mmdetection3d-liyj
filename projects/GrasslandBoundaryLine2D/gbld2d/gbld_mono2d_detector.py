@@ -74,6 +74,8 @@ class GBLDMono2Detector(SingleStageDetector):
             different resolutions.
         """
         batch_imgs = batch_inputs_dict['imgs']
+        # get flops
+        # batch_imgs = batch_inputs_dict
         x = self.backbone(batch_imgs)
         if self.with_neck:
             x = self.neck(x)

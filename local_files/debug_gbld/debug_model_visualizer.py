@@ -16,6 +16,8 @@ from mmengine.runner import Runner
 import numpy as np
 from mmdet3d.utils import replace_ceph_backend
 from mmengine.evaluator import Evaluator
+from mmengine.fileio import get
+import mmcv
 
 
 #----------------------------------------------调试模型构建----------------------------------------------
@@ -57,6 +59,14 @@ def parse_args():
         'specify, try to auto resume from the latest checkpoint '
         'in the work directory.')
     parser.add_argument(
+        '--show', action='store_true', help='show prediction results')
+    parser.add_argument(
+        '--show-dir',
+        help='directory where painted images will be saved. '
+        'If specified, it will be automatically saved '
+        'to the work_dir/timestamp/show_dir')
+
+    parser.add_argument(
         '--ceph', action='store_true', help='Use ceph as data storage backend')
     parser.add_argument(
         '--cfg-options',
@@ -81,6 +91,8 @@ def parse_args():
             'multi-modality_det'
         ],
         help='Determine the visualization method depending on the task.')
+    parser.add_argument(
+        '--score-thr', type=float, default=0.1, help='bbox score threshold')
     # When using PyTorch version >= 2.0.0, the `torch.distributed.launch`
     # will pass the `--local-rank` parameter to `tools/train.py` instead
     # of `--local_rank`.
@@ -93,6 +105,7 @@ def parse_args():
 
 def main(config_path, checkpoint_path):
     args = parse_args()
+    args.task = "mono_det"
 
     args.config = config_path
     args.checkpoint = checkpoint_path
@@ -295,6 +308,36 @@ def build_evaluator(evaluator: Union[Dict, List, Evaluator]) -> Evaluator:
             f', but got {evaluator}')
 
 
+
+def trigger_visualization_hook(cfg, args):
+    default_hooks = cfg.default_hooks
+    if 'visualization' in default_hooks:
+        visualization_hook = default_hooks['visualization']
+        # Turn on visualization
+        visualization_hook['draw'] = True
+        if args.show:
+            visualization_hook['show'] = True
+            visualization_hook['wait_time'] = args.wait_time
+        if args.show_dir:
+            visualization_hook['test_out_dir'] = args.show_dir
+        all_task_choices = [
+            'mono_det', 'multi-view_det', 'lidar_det', 'lidar_seg',
+            'multi-modality_det'
+        ]
+        assert args.task in all_task_choices, 'You must set '\
+            f"'--task' in {all_task_choices} in the command " \
+            'if you want to use visualization hook'
+        visualization_hook['vis_task'] = args.task
+        visualization_hook['score_thr'] = args.score_thr
+    else:
+        raise RuntimeError(
+            'VisualizationHook must be included in default_hooks.'
+            'refer to usage '
+            '"visualization=dict(type=\'VisualizationHook\')"')
+
+    return cfg
+
+
 from mmdet3d.apis import init_model
 def debug_model_infer(cfg, args):
     save_root = "/home/dell/liyongjing/test_data/debug"
@@ -334,6 +377,10 @@ def debug_model_infer(cfg, args):
     val_evaluator = cfg.get('val_evaluator')
     val_evaluator = build_evaluator(val_evaluator)
 
+    cfg = trigger_visualization_hook(cfg, args)
+    visualizer = cfg.get('visualizer')
+    visualizer = VISUALIZERS.build(visualizer)
+
     # for idx, data_batch in enumerate(train_data_loader):
     for idx, data_batch in enumerate(val_data_loader):
         # 调用model的data_preprocessor进行处理后
@@ -345,6 +392,7 @@ def debug_model_infer(cfg, args):
 
         # loss
         # loss = model(data_batch["inputs"], data_batch["data_samples"], mode="loss")
+        # print(data_batch)
 
         # predict
         results = model(data_batch["inputs"], data_batch["data_samples"], mode="predict")
@@ -363,12 +411,55 @@ def debug_model_infer(cfg, args):
         #     outputs = self.runner.model.val_step(data_batch)
 
         # 采用evaluator进行测评
-        val_evaluator.process(data_samples=results, data_batch=data_batch)
+        # val_evaluator.process(data_samples=results, data_batch=data_batch)
+
+        # 调用visualize, 在Det3DVisualizationHook中会调用这部分,将所需的信息给到visulaizer
+        # mono_det作为gbld的任务类型
+        def get_data_from_hook(outputs):
+            data_input = dict()
+            # backend_args = dict(type='LocalVisBackend')
+            backend_args = None
+            assert 'img_path' in outputs[0], 'img_path is not in outputs[0]'
+            img_path = outputs[0].img_path
+            if isinstance(img_path, list):
+                img = []
+                for single_img_path in img_path:
+                    img_bytes = get(
+                        single_img_path, backend_args=backend_args)
+                    single_img = mmcv.imfrombytes(
+                        img_bytes, channel_order='rgb')
+                    img.append(single_img)
+            else:
+                img_bytes = get(img_path, backend_args=backend_args)
+                img = mmcv.imfrombytes(img_bytes, channel_order='rgb')
+            data_input['img'] = img
+            return data_input
+
+        # 从visulaize hook得到输出
+        data_input = get_data_from_hook(results)
+
+        # visualizer.add_datasample()
+        # if total_curr_iter % self.interval == 0:
+        # 进行val的单次验证
+        visualizer.add_datasample(
+            'val sample',
+            data_input,
+            data_sample=results[0],
+            draw_gt=True,
+            draw_pred=True,
+            show=False,
+            vis_task="mono_det",
+            wait_time=1,  # 0 如果设置为0就会进入到等待状态
+            pred_score_thr=0.3,
+            step=0,
+            show_pcd_rgb=False,
+            out_file="/home/dell/liyongjing/test_data/debug/hha.jpg"
+        )
 
         if idx == 2:
             break
 
-        if 1:
+        if 0:
             # 根据预测的结果进行可视化
             for batch_id, result in enumerate(results):
                 img = data_batch["inputs"]["imgs"][batch_id]
@@ -446,9 +537,8 @@ def debug_model_infer(cfg, args):
                 exit(1)
 
     # 测评的结果
-    metrics = val_evaluator.evaluate(len(val_data_loader.dataset))
+    # metrics = val_evaluator.evaluate(len(val_data_loader.dataset))
     print(metrics)
-
 
 
 if __name__ == '__main__':
@@ -458,8 +548,9 @@ if __name__ == '__main__':
 
     # 用来调试kpi的测评情况
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/20230803_150518/vis_data/config.py"
-    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
-    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/epoch_200.pth"
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_debug_no_dcn/gbld_debug_config_no_dcn.py"
+    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn.py"
+    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_debug_no_dcn/epoch_250.pth"
 
     print("config_path:", config_path)
     main(config_path, checkpoint_path)

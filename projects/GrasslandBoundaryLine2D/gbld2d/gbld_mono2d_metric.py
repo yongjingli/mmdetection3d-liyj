@@ -4,6 +4,8 @@ from os import path as osp
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 import cv2
+import json
+import os
 import mmengine
 import numpy as np
 import pyquaternion
@@ -20,6 +22,7 @@ from mmdet3d.registry import METRICS
 from mmdet3d.structures import (CameraInstance3DBoxes, LiDARInstance3DBoxes,
                                 bbox3d2result, xywhr2xyxyr)
 
+from mmengine.utils import ProgressBar, mkdir_or_exist
 
 import matplotlib.pyplot as plt
 
@@ -103,6 +106,7 @@ class GbldMetric(BaseMetric):
                  jsonfile_prefix: Optional[str] = None,
                  eval_version: str = 'detection_cvpr_2019',
                  collect_device: str = 'cpu',
+                 output_dir: bool = None,
                  backend_args: Optional[dict] = None) -> None:
         self.default_prefix = 'Gbld metric'
         super(GbldMetric, self).__init__(
@@ -133,6 +137,9 @@ class GbldMetric(BaseMetric):
         self.test_stage = test_stage
         self.line_thinkness = line_thinkness
         self.rescale = rescale
+        self.output_dir = output_dir
+        if output_dir is not None:
+            mkdir_or_exist(output_dir)
 
     # def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
     def process(self, data_batch: dict, data_samples) -> None:
@@ -162,10 +169,6 @@ class GbldMetric(BaseMetric):
             result['stages_pred_result'] = stages_pred_result
             result['batch_input_shape'] = batch_input_shape
             result['eval_gt_lines'] = eval_gt_lines
-
-            result['stages_pred_result'] = stages_pred_result
-            result['eval_gt_lines'] = eval_gt_lines
-            result['batch_input_shape'] = batch_input_shape
 
             sample_idx = data_sample['sample_idx']
             result['sample_idx'] = sample_idx
@@ -200,12 +203,19 @@ class GbldMetric(BaseMetric):
             return metric_dict
 
         result_list = results
+
         for metric in self.metrics:
             if metric == "line_pixel":
                 f1_line_pixel = self.gbld_evaluate_line_pixel(
                     result_list, classes=classes, metric=metric, logger=logger)
 
                 metric_dict["line_pixel"] = f1_line_pixel
+
+        # 保存测评log
+        if self.output_dir is not None:
+            with open(os.path.join(self.output_dir, 'log.txt'), 'w') as file:
+                file.write(json.dumps(metric_dict))
+
         return metric_dict
 
     def gbld_evaluate_line_pixel(self,

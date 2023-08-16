@@ -1,5 +1,5 @@
 custom_imports = dict(
-    imports=['projects.GlasslandBoundaryLine2D.gbld2d'], allow_failed_imports=False)
+    imports=['projects.GrasslandBoundaryLine2D.gbld2d'], allow_failed_imports=False)
 
 experiment_name = "debug_gbld"
 
@@ -9,13 +9,14 @@ classes = [
             'glass_edge_up_plant',
             'glass_edge_up_build',
         ]
+palette = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
 num_classes = len(classes)
 test_line_thinkness = 10      # 测试时绘制线的宽度,在原图大小上进行测试, 这个宽度需要根据输入的size进行调整
 # input_size = (960, 544)     # (img_w, img_h)    # 对应输入为[1920, 1080]  需要padding,在右下角
 input_size = (960, 608)       # (img_w, img_h)      # 对应输入为[2880, 1860]  需要padding,在右下角
 
 # work_dir = './work_dirs/fcos3d_r101-caffe-dcn_fpn_head-gn_8xb2-1x_nus-mono3d_v1.0-min'
-work_dir = './work_dirs/gbld_debug'
+work_dir = './work_dirs/gbld_debug_no_dcn'
 
 # 模型部分的定义
 model = dict(
@@ -53,7 +54,8 @@ model = dict(
         init_cfg=dict(
             type='Pretrained',
             checkpoint='open-mmlab://detectron2/resnet50_caffe'),          # 根据选择的模型设置预训练模型
-        dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),
+        # dcn=dict(type='DCNv2', deform_groups=1, fallback_on_stride=False),   # 设置是否使用DCN
+        dcn=None,
         stage_with_dcn=(
             False,
             False,
@@ -336,8 +338,9 @@ val_evaluator = dict(
     type='GbldMetric',
     data_root='/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230728_mmdet3d',
     ann_file='gbld_infos_test.pkl',
-    dataset_meta=dict(classes=classes
-                      , version='v1.0-mini'),
+    dataset_meta=dict(classes=classes,
+                      version='v1.0-mini',
+                      palette=palette),
     test_stage=[0],        # 模型在不同的分辨率上都有预测的结果,选择测评的位置
     metric='line_pixel',
     line_thinkness=test_line_thinkness,     # 绘制线的宽度
@@ -349,9 +352,10 @@ test_evaluator = dict(
     data_root='/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230728_mmdet3d',
     ann_file='gbld_infos_test.pkl',
     dataset_meta=dict(classes=classes,
-                      version='v1.0-mini'),
+                      version='v1.0-mini',
+                      palette=palette),
     test_stage=[0],
-    metric='batch_gt_instances',
+    metric='line_pixel',
     line_thinkness=test_line_thinkness,
     rescale=True,  # 在原图分辨率上进行测评
     backend_args=None)
@@ -360,11 +364,17 @@ vis_backends = [
     dict(type='LocalVisBackend'),
 ]
 visualizer = dict(
-    type='Det3DLocalVisualizer',
+    type='GbldVisualizer',
     vis_backends=[
         dict(type='LocalVisBackend'),
     ],
-    name='visualizer')
+    name='visualizer',
+    line_color=palette,
+    text_color=palette,
+    line_width=3,
+    font_size=18,
+    with_text=True,
+    classes=classes)   # None或者classes, None 为显示数据类别, classes为显示具体的类别
 
 # train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=12, val_begin=10, val_interval=1)
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=250, val_begin=30, val_interval=10)
@@ -424,7 +434,10 @@ default_hooks = dict(
     # checkpoint=dict(type='CheckpointHook', interval=-1),
     checkpoint=dict(type='CheckpointHook', interval=100),    # 设置保存checkpoint的间隔
     sampler_seed=dict(type='DistSamplerSeedHook'),
-    visualization=dict(type='Det3DVisualizationHook'))
+    visualization=dict(type='Det3DVisualizationHook',
+                       draw_gt=True, draw_pred=True,     # 控制可视化的内容
+                       show=False, wait_time=1)          # 控制是否显示,以及显示的间距
+)
 env_cfg = dict(
     cudnn_benchmark=False,
     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),

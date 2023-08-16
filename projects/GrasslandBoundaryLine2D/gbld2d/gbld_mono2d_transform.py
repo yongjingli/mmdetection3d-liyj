@@ -590,6 +590,11 @@ class PackGbldMono2dInputs(BaseTransform):
         else:
             data_sample.eval_ann_info = None
 
+        if "img_path" in results:
+            data_sample.img_path = results["img_path"]
+        else:
+            data_sample.img_path = None
+
         packed_results = dict()
         packed_results['data_samples'] = data_sample
         packed_results['inputs'] = inputs

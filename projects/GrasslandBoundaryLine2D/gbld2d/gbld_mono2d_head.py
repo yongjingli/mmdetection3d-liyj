@@ -236,6 +236,11 @@ class GBLDMono2DHead(BaseModule):
         for feat_index in self.in_feat_index:
             x_neck_select.append(x[feat_index])
 
+        # 设置只输出单层的结果
+        if torch.onnx.is_in_onnx_export():
+            x_neck_select = x_neck_select[0]
+            return self.forward_single(x_neck_select)
+
         # return multi_apply(self.forward_single, x)
         return multi_apply(self.forward_single, x_neck_select)
 
