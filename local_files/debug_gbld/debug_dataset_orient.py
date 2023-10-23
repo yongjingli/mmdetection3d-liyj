@@ -9,7 +9,6 @@ import torch
 import cv2
 import math
 import numpy as np
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from mmengine.config import Config, DictAction
@@ -18,7 +17,7 @@ from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
 
 from mmdet3d.utils import replace_ceph_backend
-from debug_utils import cal_points_orient, draw_orient
+from debug_utils import decode_gt_lines, cal_points_orient, draw_orient, filter_near_same_points
 
 
 def parse_args():
@@ -349,7 +348,7 @@ def debug_dataset(cfg):
             # "gt_instances".bboxes
 
             print(isinstance(data_batch, list))
-            # 调用model的data_preprocessor进行处理后,构成batch的形式
+            # 调用model的data_preprocessor进行处理后
             # 合并为["imgs"], Det3DDataPreprocessor在将所有图像进行堆叠的时候,会根据一个size的倍数进行paddng,同时会根据最大的img-size进行stack
             # 在右下角进行padding的同时也不会影响det的label坐标
             data_batch = data_preprocessor(data_batch)
@@ -357,20 +356,12 @@ def debug_dataset(cfg):
 
             # 对于每个case的label, label的数量都是不定的,所以采用list[]的形式输入程序
             print(len(data_batch["data_samples"]))
-            # print(data_batch["data_samples"][0].gt_instances.bboxes.shape)
-            # print(data_batch["data_samples"][1].gt_instances.bboxes.shape)
-
-            # print(data_batch["data_samples"][1].gt_instances.gt_line_maps_stages.shape)
-
-            # batch形式的label-gt不在dataloader里构建的,在head里构建
-            print(len(data_batch["data_samples"][1].gt_instances.gt_line_maps_stages))
-            print(data_batch["data_samples"][1].gt_instances.gt_line_maps_stages[0]["orient_map_mask"].shape)
-
-            exit(1)
+            print(data_batch["data_samples"][0].gt_instances.bboxes.shape)
+            print(data_batch["data_samples"][1].gt_instances.bboxes.shape)
 
     print("metainfo:", dataset.metainfo)
     for idx, data in enumerate(dataset):
-        print("one data", idx)
+        print("one data")
         print(data["inputs"]["img"].shape)
         # data: "data_samples", "inputs"
         # data_samples: gt_instances, get_instances_3d等等
@@ -395,6 +386,8 @@ def debug_dataset(cfg):
             points = gt_line["points"]
             category_id = gt_line["category_id"]
 
+            points = filter_near_same_points(points)
+
             pre_point = points[0]
             for i, cur_point in enumerate(points[1:]):
                 x1, y1 = int(pre_point[0]), int(pre_point[1])
@@ -403,93 +396,37 @@ def debug_dataset(cfg):
                 thickness = 1
                 # thickness = 3
                 # cv2.line是具有一定宽度的直线,如何获取密集的orients?应该也构建自身的mask?
-                # cv2.line(img_show, (x1, y1), (x2, y2), (255, 0, 0), thickness, 8)
+                # cv2.line(img_show, (x1, y1), (x2, y2), (255, 0, 0), thickness, 1)
 
                 # 求每个点的方向
                 if i % 100 == 0:
+                # if i % 1 == 0:
                     orient = cal_points_orient(pre_point, cur_point)
+                    if orient != -1:
+                        # 转个90度,指向草地
+                        # orient = orient + 90
+                        # if orient > 360:
+                        #     orient = orient - 360
 
-                    # 转个90度,指向草地
-                    # orient = orient + 90
-                    # if orient > 360:
-                    #     orient = orient - 360
-
-                    img_show = draw_orient(img_show, pre_point, orient, arrow_len=15)
+                        img_show = draw_orient(img_show, pre_point, orient, arrow_len=15)
 
                 pre_point = cur_point
                 # print(orient)
-        # plt.imshow(img_show[:, :, ::-1])
-        # plt.show()
 
-        # debug_train_gt
-        if 1:
-            gt_line_maps_stages = data["data_samples"].gt_instances.gt_line_maps_stages
-            # 可视化不同stage的结果
-            for gt_line_maps in gt_line_maps_stages:
-                gt_confidence = gt_line_maps["gt_confidence"]
-                gt_offset_x = gt_line_maps["gt_offset_x"]
-                gt_offset_y = gt_line_maps["gt_offset_y"]
-                gt_line_index = gt_line_maps["gt_line_index"]
-                ignore_mask = gt_line_maps["ignore_mask"]
-                foreground_mask = gt_line_maps["foreground_mask"]
-                gt_line_id = gt_line_maps["gt_line_id"]
-                gt_line_cls = gt_line_maps["gt_line_cls"]
-                foreground_expand_mask = gt_line_maps["foreground_expand_mask"]
-                orient_map_mask = gt_line_maps["orient_map_mask"]
-                orient_map_sin = gt_line_maps["orient_map_sin"]
-                orient_map_cos = gt_line_maps["orient_map_cos"]
-
-                gt_confidence = gt_confidence.cpu().detach().numpy()
-                gt_offset_x = gt_offset_x.cpu().detach().numpy()
-                gt_offset_y = gt_offset_y.cpu().detach().numpy()
-                gt_line_index = gt_line_index.cpu().detach().numpy()
-                ignore_mask = ignore_mask.cpu().detach().numpy()
-                foreground_mask = foreground_mask.cpu().detach().numpy()
-                gt_line_id = gt_line_id.cpu().detach().numpy()
-                gt_line_cls = gt_line_cls.cpu().detach().numpy()
-                foreground_expand_mask = foreground_expand_mask.cpu().detach().numpy()
-
-                orient_map_mask = orient_map_mask.cpu().detach().numpy()
-                orient_map_sin = orient_map_sin.cpu().detach().numpy()
-
-                orient_map_cos = orient_map_cos.cpu().detach().numpy()
-
-                # 将orient转回到角度表示
-                # orients = np.arctan2(orient_map_sin, orient_map_cos) / np.pi * 180
-                # 转回到MEBOW的表示
-                # if 180 >= orient >= 0:
-                #     orient = 90 + (180 - orient)
-                # elif orient >= -90:
-                #     orient = 270 + abs(orient)
-                # elif orient >= -180:
-                #     orient = abs(orient) - 90
-                # else:
-                #     orient = None
-
-                plt.subplot(2, 2, 1)
-                plt.imshow(gt_confidence[0])
-
-                plt.subplot(2, 2, 2)
-                plt.imshow(gt_line_index[0])
-
-                plt.subplot(2, 2, 3)
-                plt.imshow(orient_map_mask[0])
-
-                plt.subplot(2, 2, 4)
-                plt.imshow(img_show[:, :, ::-1])
-                plt.show()
-                # exit(1)
-
+        plt.imshow(img_show[:, :, ::-1])
+        plt.show()
         exit(1)
 
 
 if __name__ == '__main__':
+    # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config.py"
     # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn.py"
-    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2.py"
-
+    # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2.py"
+    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2_1013.py"
     # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
 
     # 用于加载数据的测试调试,可用于验证数据加载和数据增强的正确性
     # debug的时候发现padding的像素在左边,这是由于padding后的flip造成的
+    # 用来debug预测曲线朝向的生成
     print("config_path:", config_path)
     main(config_path)

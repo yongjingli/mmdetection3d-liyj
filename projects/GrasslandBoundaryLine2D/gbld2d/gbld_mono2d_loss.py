@@ -57,10 +57,16 @@ class GbldSegLoss(nn.Module):
                     continue
                 pred = pred[msk]
                 gt = gt[msk]
-                dice_loss += 1 - ((pred * gt).sum() + eps) / (pred.pow(2).sum() + gt.pow(2).sum() + eps)
+                positive_loss = 1 - ((pred * gt).sum() + eps) / (pred.pow(2).sum() + gt.pow(2).sum() + eps)
+                dice_loss += positive_loss
                 pred = 1 - pred
                 gt = 1 - gt
-                dice_loss += - ((pred * gt).sum() + eps) / (pred.pow(2).sum() + gt.pow(2).sum() + eps)
+                negative_loss = - ((pred * gt).sum() + eps) / (pred.pow(2).sum() + gt.pow(2).sum() + eps)
+                # negative_loss = ((pred * gt).sum() + eps) / (pred.pow(2).sum() + gt.pow(2).sum() + eps)
+                dice_loss += negative_loss
+
+                # dice_loss = max(dice_loss, 0)
+                # print("dice_loss:", dice_loss, "positive_loss:", positive_loss, "negative_loss:", negative_loss)
 
             seg_loss += dice_loss_weight * dice_loss / seg_pred.shape[0]
         else:
@@ -205,3 +211,42 @@ class GbldClsLoss(nn.Module):
             cls_loss = torch.tensor(0.0)
         cls_loss = cls_loss * self.loss_weight
         return cls_loss
+
+
+@MODELS.register_module()
+class GbldOrientLoss(nn.Module):
+    def __init__(self,
+                 loss_weight=1.0):
+        super(GbldOrientLoss, self).__init__()
+        self.loss_weight = loss_weight
+
+    def forward(self,
+                orient_pred,
+                gt_orient,
+                gt_orient_mask,):
+        # offset losses
+        gt_orient_mask = gt_orient_mask > 0
+        # gt_foreground_expand_mask = gt_foreground_expand_mask > 0
+        if gt_orient_mask.sum() > 0:
+            # offset loss
+            # pred_offset_x = torch.sigmoid(pred_offset_x)
+            # pred_offset_y = torch.sigmoid(pred_offset_y)
+            #
+            # offset_loss_x = F.mse_loss(pred_offset_x, gt_offset_x, reduction="none")
+            # offset_loss_x = offset_loss_x[gt_foreground_mask]
+            #
+            # offset_loss_y = F.mse_loss(pred_offset_y, gt_offset_y, reduction="none")
+            # offset_loss_y = offset_loss_y[gt_foreground_mask]
+            # offset_loss = offset_loss_x.mean() + offset_loss_y.mean()
+
+            # 将sin和cos合并在一起计算loss
+            orient_pred = torch.sigmoid(orient_pred) * 2 - 1
+            orient_loss = F.mse_loss(orient_pred, gt_orient, reduction="none")
+            orient_loss = orient_loss[gt_orient_mask.expand(-1, 2, -1, -1)]
+            orient_loss = orient_loss.mean()
+
+        else:
+            orient_loss = torch.tensor(0.0)
+        orient_loss = orient_loss * self.loss_weight
+
+        return orient_loss

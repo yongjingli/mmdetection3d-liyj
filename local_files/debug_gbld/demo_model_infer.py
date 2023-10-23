@@ -15,6 +15,7 @@ import shutil
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from mmengine.dataset import Compose, pseudo_collate
+from debug_utils import decode_gt_lines, cal_points_orient, draw_orient, filter_near_same_points
 
 
 color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
@@ -23,25 +24,58 @@ color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 25
 
 
 def main():
-    save_root = "/home/dell/liyongjing/test_data/debug"
-    if os.path.exists(save_root):
-        shutil.rmtree(save_root)
-    os.mkdir(save_root)
-
     # build the model from a config file and a checkpoint file
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/configs/gbld_debug_config.py"
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/20230804_164059/vis_data/config.py"
     # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/20230804_164059/epoch_250.pth"
 
     # no dcn
-    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug_no_dcn/20230812_182852/vis_data/config.py"
-    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug_no_dcn/epoch_250.pth"
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug_no_dcn/20230812_182852/vis_data/config.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug_no_dcn/epoch_250.pth"
 
+    # no dcn v0.2
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230905_v0.2/gbld_debug_config_no_dcn_v0.2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230905_v0.2/epoch_250.pth"
+
+    # no dcn v0.2 with orient
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230906_v0.2_fit_line_crop/gbld_debug_config_no_dcn_v0.2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230906_v0.2_fit_line_crop/epoch_200.pth"
+
+    # no dcn v0.2 with orient2
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/gbld_debug_config_no_dcn_v0.2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/epoch_250.pth"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop_batch_12/epoch_250.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/gbld_debug_config_no_dcn_v0.2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/epoch_250.pth"
+
+    # debug
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/gbld_debug_config_no_dcn_v0.2_1013.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/epoch_250.pth"
+
+    # 服务器
+    # config_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/gbld_debug_config_no_dcn_v0.2_1013.py"
+    # checkpoint_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/epoch_250.pth"
+
+    # visible hanging covered
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/epoch_250.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered6/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered6/epoch_250.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/epoch_200.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/epoch_200.pth"
+
+    # 服务器
+    config_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/gbld_debug_config_no_dcn_datasetv2.py"
+    checkpoint_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/epoch_200.pth"
 
     model = init_model(config_path, checkpoint_path, device='cuda:0')
-
     # onnx output
-
 
     # 采用官方的方式进行推理
     cfg = model.cfg
@@ -49,11 +83,47 @@ def main():
     test_pipeline = deepcopy(cfg.val_dataloader.dataset.pipeline)
     test_pipeline = Compose(test_pipeline)
 
-    test_root = "/home/dell/liyongjing/test_data/rosbag2_2023_07_20-18_24_24_0_image"
+    # test_root = "/home/dell/liyongjing/test_data/rosbag2_2023_07_20-18_24_24_0_image"
+    # test_root = "/media/dell/Egolee1/liyj/data/label_data/label_data/2023_08_31-17_13_04_0_images"
     # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230728_mmdet3d/train/images"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags_parse_data/2023_08_30-11_09_04_0/image"
+    # test_root = "/media/dell/Egolee1/liyj/data/debug_data/debug_construct_maps_20230913/image"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-17_51_57/parse_data/image"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-17_41_56/parse_data/image"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-17_53_31/parse_data/image"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-18_02_54/parse_data/image"
+    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230927_mmdet3d/train/images"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_28_36/parse_data/image"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_24_14/parse_data/image"
+    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train/images"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231015/long_rosbag2_2023_10_10-15_04_43_test_1/parse_data/image"
+    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train/images"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_28_36/parse_data/image"
+    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images"
+
+    # 服务器
+    # test_root = "/data-hdd/XW_Data/collect_data/data_0918/rosbag2_2023_09_18-17_41_56/parse_data/image"
+    # save_root = "/media/dell/Egolee1/liyj/data/ros_bags/rosbag2_2023_09_05-15_33_21/parse_data/image_vis"
+    # test_root = "/data-hdd/XW_Data/collect_data/20231010/long_rosbag2_2023_10_10-15_04_43_test_1/parse_data/image"
+    test_root = "/data-hdd/XW_Data/collect_data/20231010/short_rosbag2_2023_10_10-15_49_36_test_2/parse_data_liyj/image"
+    print(test_root)
+
+    save_root = test_root + "_vis"
+    if os.path.exists(save_root):
+        shutil.rmtree(save_root)
+    os.mkdir(save_root)
+
     img_names = [name for name in os.listdir(test_root) if name[-4:] in ['.jpg', '.png']]
+    jump = 1
+    count = 0
     for img_name in tqdm(img_names):
-        # img_name = "1689848710237850651.jpg"
+        print(img_name)
+        count = count + 1
+        if count % jump != 0:
+            continue
+
+        # img_name = "1695031543693612696.jpg"
+        # img_name = "1696991348.057879.jpg"
         path_0 = os.path.join(test_root, img_name)
         # path_0 = "/home/dell/liyongjing/programs/mmdetection3d-liyj/local_files/debug_gbld/data/1689848680876640844.jpg"
         # path_0 = "/media/dell/Elements SE/liyj/data/collect_data_20230720/rosbag2_2023_07_20-18_24_24/glass_edge_overfit_20230721/1689848678804013195.jpg"
@@ -99,16 +169,79 @@ def main():
                 single_stage_result = stages_result[0]
                 for curve_line in single_stage_result:
                     curve_line = np.array(curve_line)
+
+                    poitns_cls = curve_line[:, 4]
+
+                    # line_cls = np.argmax(np.bincount(poitns_cls.astype(np.int32)))
+                    # points[:, 4] = cls
+
+                    point_num = len(curve_line)
                     pre_point = curve_line[0]
 
-                    line_cls = pre_point[4]
-                    color = color_list[int(line_cls)]
-                    for cur_point in curve_line[1:]:
+                    # line_cls = pre_point[4]
+                    # color = color_list[int(line_cls)]
+                    # x1, y1 = int(pre_point[0]), int(pre_point[1])
+
+                    # color = [0, 0, 255]
+                    # cv2.circle(img_origin, (int(x1), int(y1)), 10, (0, 0, 255), -1)
+
+                    for i, cur_point in enumerate(curve_line[1:]):
                         x1, y1 = int(pre_point[0]), int(pre_point[1])
                         x2, y2 = int(cur_point[0]), int(cur_point[1])
 
+                        if len(pre_point) >= 9:
+                            point_visible = pre_point[6]
+                            point_hanging = pre_point[7]
+                            point_covered = pre_point[8]
+                        else:
+                            point_visible = -1
+                            point_hanging = -1
+                            point_covered = -1
+                        # print("point_covered:", point_covered)
+
+                        point_cls = pre_point[4]
+                        color = color_list[int(point_cls)]
+
+                        # if point_visible < 0.3 and point_covered > 0.3:
+                        #     color = (0, 0, 0)
+
+                        if point_visible < 0.2:
+                            color = (0, 0, 0)
+
                         thickness = 3
                         cv2.line(img_origin, (x1, y1), (x2, y2), color, thickness, 8)
+                        line_orient = cal_points_orient(pre_point, cur_point)
+
+                        # print(i)
+                        if i % 5 == 0:
+                            orient = pre_point[5]
+                            if orient != -1:
+                                reverse = False   # 代表反向是否反了
+                                orient_diff = abs(line_orient - orient)
+                                if orient_diff > 180:
+                                    orient_diff = 360 - orient_diff
+
+                                if orient_diff > 90:
+                                    reverse = True
+
+                                # color = (0, 255, 0)
+                                # if reverse:
+                                #     color = (0, 0, 255)
+
+                                # 绘制预测的方向
+                                # 转个90度,指向草地
+                                orient = orient + 90
+                                if orient > 360:
+                                    orient = orient - 360
+
+                                # img_origin = draw_orient(img_origin, pre_point, orient, arrow_len=30, color=color)
+
+                        if i == point_num//2:
+                            line_orient = line_orient + 90
+                            if line_orient > 360:
+                                line_orient = line_orient - 360
+                            img_origin = draw_orient(img_origin, pre_point, line_orient, arrow_len=50, color=color)
+
                         pre_point = cur_point
 
                 s_img_path = os.path.join(save_root, img_name)

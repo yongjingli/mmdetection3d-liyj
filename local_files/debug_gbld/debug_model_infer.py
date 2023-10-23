@@ -5,6 +5,7 @@ import argparse
 import logging
 import os
 import cv2
+from tqdm import tqdm
 import os.path as osp
 import matplotlib.pyplot as plt
 import torch
@@ -21,6 +22,7 @@ from mmdet3d.utils import replace_ceph_backend
 from torch.utils.data import DataLoader
 from typing import Callable, Dict, List, Optional, Sequence, Union
 import copy
+import shutil
 from functools import partial
 from mmengine.registry import (DATA_SAMPLERS, DATASETS, EVALUATOR, FUNCTIONS,
                                HOOKS, LOG_PROCESSORS, LOOPS, MODEL_WRAPPERS,
@@ -31,6 +33,17 @@ from mmengine.dist import (broadcast, get_dist_info, get_rank, init_dist,
                            is_distributed, master_only)
 from mmengine.utils import apply_to, digit_version, get_git_hash, is_seq_of
 from mmengine.utils.dl_utils import TORCH_VERSION
+
+from copy import deepcopy
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+from mmengine.dataset import Compose, pseudo_collate
+from debug_utils import decode_gt_lines, cal_points_orient, draw_orient, filter_near_same_points, parse_ann_info, parse_ann_infov2
+
+
+color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
+              (230, 216, 173), (128, 0, 128), (203, 192, 255), (238, 130, 238), (130, 0, 75),
+              (169, 169, 169), (0, 69, 255)]  # [纯红、纯绿、纯蓝、金色、纯黄、天蓝、紫色、粉色、紫罗兰、藏青色、深灰色、橙红色]
 
 
 def parse_args():
@@ -295,6 +308,7 @@ def build_dataloader(dataloader: Union[DataLoader, Dict],
         **dataloader_cfg)
     return data_loader
 
+
 from mmdet3d.apis import init_model
 def debug_model_infer(cfg, args):
     default_scope = 'mmdet3d'
@@ -402,10 +416,363 @@ def debug_model_infer(cfg, args):
             exit(1)
 
 
+def debug_model_infer_heatmap(config_path, checkpoint_path):
+    # test_root = "/data-hdd/liyj/data/label_data/20230926/dataset_28/images"
+    # test_root = "/media/dell/Egolee1/liyj/label_data/20230926/dataset_28/images"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_28_36/parse_data/image"
+    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_28_36/parse_data/image"
+    test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train/images"
+    print(test_root)
+
+    model = init_model(config_path, checkpoint_path, device='cuda:0')
+    cfg = model.cfg
+
+    test_pipeline = deepcopy(cfg.val_dataloader.dataset.pipeline)
+    test_pipeline = Compose(test_pipeline)
+
+    save_root = test_root + "_debug"
+    if os.path.exists(save_root):
+        shutil.rmtree(save_root)
+    os.mkdir(save_root)
+    img_names = [name for name in os.listdir(test_root) if name[-4:] in ['.jpg', '.png']]
+    jump = 5
+    count = 10
+
+    for img_name in tqdm(img_names):
+        # img_name = "1695031543693612696.jpg"
+        # img_name = "258733034.13391113.jpg"
+        img_name = "1695031238613012474.jpg"
+        count = count + 1
+        if count % jump != 0:
+            continue
+
+        # img_name = "1695031543693612696.jpg"
+        path_0 = os.path.join(test_root, img_name)
+        # path_0 = "/home/dell/liyongjing/programs/mmdetection3d-liyj/local_files/debug_gbld/data/1689848680876640844.jpg"
+
+        img = cv2.imread(path_0)
+
+        img_paths = [path_0]
+        batch_data = []
+        for img_path in img_paths:    # 这里可以是列表,然后推理采用batch的形式
+            data_info = {}
+            data_info['img_path'] = img_path
+            data_input = test_pipeline(data_info)
+            batch_data.append(data_input)
+
+        # 这里设置为单个数据, 可以是batch的形式
+        collate_data = pseudo_collate(batch_data)
+
+        # forward the model
+        with torch.no_grad():
+            # results = model.test_step(collate_data)
+            collate_data = model.data_preprocessor(collate_data, False)
+
+            # 与gt进行计算losss
+            # results = model.loss(batch_inputs=collate_data["inputs"],
+            #                      batch_data_samples=collate_data["data_samples"])
+
+
+            # 得到预测解析后的结果
+            # results = model.predict(batch_inputs=collate_data["inputs"],
+            #                      batch_data_samples=collate_data["data_samples"])
+
+            # 得到head的heatmap的结果,用于分析
+            # dir_seg_pred, dir_offset_pred, dir_seg_emb_pred, dir_connect_emb_pred, dir_cls_pred, dir_orient_pred
+            results = model._forward(batch_inputs=collate_data["inputs"],
+                                 batch_data_samples=collate_data["data_samples"])
+
+            # 为多分辨率多尺度的预测结果,取最大的分辨率
+            # dir_seg_pred, dir_offset_pred, dir_seg_emb_pred,
+            bath_size = 0
+            stages = 0
+            heatmap_map_seg = torch.sigmoid(results[0][stages].cpu().detach()).numpy()[bath_size][0] > 0.2
+            heatmap_map_emb = results[2][stages].cpu().detach().numpy()[bath_size][0]
+
+            plt.subplot(2, 2, 1)
+            plt.imshow(img[:, :, ::-1])
+            plt.subplot(2, 2, 2)
+            plt.imshow(heatmap_map_seg)
+            plt.subplot(2, 2, 3)
+            plt.imshow(heatmap_map_emb)
+            plt.show()
+
+            exit(1)
+
+
+def debug_model_infer_loss(config_path, checkpoint_path):
+    # test_root = "/data-hdd/liyj/data/label_data/20230926/dataset_28/images"
+    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230927_mmdet3d/train"
+    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train"
+    test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train"
+
+    image_root = os.path.join(test_root, "images")
+    json_root = os.path.join(test_root, "jsons")
+
+
+    model = init_model(config_path, checkpoint_path, device='cuda:0')
+    cfg = model.cfg
+
+    # test_pipeline = deepcopy(cfg.val_dataloader.dataset.pipeline)
+    # test_pipeline = Compose(test_pipeline)
+
+    train_pipeline = deepcopy(cfg.train_dataloader.dataset.pipeline)
+    train_pipeline_no_aug = []
+    for _pipeline in train_pipeline:
+        print(_pipeline["type"])
+        if _pipeline["type"] in ["mmdet.LoadImageFromFile", "GgldResize", "GgldLoadLines", "Pad",
+                                 "GgldLineMapsGenerate",  "GgldLineMapsGenerateV2", "PackGbldMono2dInputs"]:
+            train_pipeline_no_aug.append(_pipeline)
+
+    # train_pipeline = Compose(train_pipeline)
+    train_pipeline = Compose(train_pipeline_no_aug)
+    test_pipeline = deepcopy(cfg.test_dataloader.dataset.pipeline)
+    test_pipeline = Compose(test_pipeline)
+
+    save_root = image_root + "_loss"
+    if os.path.exists(save_root):
+        shutil.rmtree(save_root)
+    os.mkdir(save_root)
+    img_names = [name for name in os.listdir(image_root) if name[-4:] in ['.jpg', '.png']]
+    jump = 1
+    # count = 10
+    count = len(img_names)
+
+    for img_name in tqdm(img_names):
+        # img_name = "1695031543693612696.jpg"
+        # img_name = "dff47067-ede3-4ac0-b903-ef04df89a291_front_camera_3531.jpg"
+        # img_name = "1696991348.057879.jpg"
+        # img_name = "1696991348.45783.jpg"
+        img_name = "1696991118.675607.jpg"
+        print(img_name)
+        count = count + 1
+        if count % jump != 0:
+            continue
+
+        # img_name = "1695031543693612696.jpg"
+        img_path_0 = os.path.join(image_root, img_name)
+        json_path_0 = os.path.join(json_root, img_name[:-4] + ".json")
+        # path_0 = "/home/dell/liyongjing/programs/mmdetection3d-liyj/local_files/debug_gbld/data/1689848680876640844.jpg"
+
+        img_paths = [img_path_0]
+        json_paths = [json_path_0]
+        batch_data = []
+        for idx, (img_path, json_path) in enumerate(zip(img_paths, json_paths)):    # 这里可以是列表,然后推理采用batch的形式
+            data_info = {}
+            data_info["img_name"] = img_name
+            data_info["ann_name"] = img_name[:-4] + ".json"
+            data_info['img_path'] = img_path
+            data_info['ann_path'] = json_path
+            data_info['sample_idx'] = idx
+
+            # data_info['ann_info'] = parse_ann_info(data_info)
+            data_info['ann_info'] = parse_ann_infov2(data_info)
+
+            data_input = train_pipeline(data_info)
+            # data_input = test_pipeline(data_info)
+            batch_data.append(data_input)
+
+        # 这里设置为单个数据, 可以是batch的形式
+        collate_data = pseudo_collate(batch_data)
+
+
+        # forward the model
+        with torch.no_grad():
+            # results = model.test_step(collate_data)
+            collate_data = model.data_preprocessor(collate_data, False)
+
+            # 与gt进行计算losss
+            loss = model.loss(batch_inputs=collate_data["inputs"],
+                                 batch_data_samples=collate_data["data_samples"])
+
+
+            # 得到head的heatmap的结果,用于分析
+            # dir_seg_pred, dir_offset_pred, dir_seg_emb_pred, dir_connect_emb_pred, dir_cls_pred, dir_orient_pred
+            heatmap = model._forward(batch_inputs=collate_data["inputs"],
+                                 batch_data_samples=collate_data["data_samples"])
+
+            # 得到预测解析后的结果, rescale=False为输入大小的图像上
+            results = model.predict(batch_inputs=collate_data["inputs"],
+                                 batch_data_samples=collate_data["data_samples"], rescale=False)
+            results = results[0]
+
+            # 为多分辨率多尺度的预测结果,取最大的分辨率
+            # dir_seg_pred, dir_offset_pred, dir_seg_emb_pred, dir_connect_emb_pred, \
+            # dir_cls_pred, dir_orient_pred, dir_visible_pred, dir_hanging_pred, dir_covered_pred
+            bath_size = 0
+            stages = 0
+
+            heatmap_map_seg = torch.sigmoid(heatmap[0][stages].cpu().detach()).numpy()[bath_size][0]
+            heatmap_map_emb = heatmap[2][stages].cpu().detach().numpy()[bath_size][0]
+            heatmap_map_cls = torch.sigmoid(heatmap[4][stages].cpu().detach()).numpy()[bath_size]
+            heatmap_map_cls = np.argmax(heatmap_map_cls, axis=0)
+            # heatmap_map_cls = torch.sigmoid(heatmap_map_cls[3]) > 0.2  # 选择不同类别的heatmap
+            heatmap_map_covered = torch.sigmoid(heatmap[8][stages].cpu().detach()).numpy()[bath_size][0]
+
+            # show pred result
+            img = collate_data["inputs"]["imgs"][bath_size]
+            img = img.cpu().detach().numpy()
+            img = np.transpose(img, (1, 2, 0))
+            mean = np.array([103.53, 116.28, 123.675, ])
+            std = np.array([1.0, 1.0, 1.0, ])
+
+            img = img * std + mean
+            img = img.astype(np.uint8)
+
+            img_show = copy.deepcopy(img.copy())
+
+            stages_result = results.pred_instances.stages_result[0]
+            meta_info = results.metainfo
+            batch_input_shape = meta_info["batch_input_shape"]
+
+            gt_line_map = np.zeros(batch_input_shape, dtype=np.uint8)
+
+            gt_lines = meta_info["gt_lines"]
+            # gt_lines = meta_info["eval_gt_lines"]
+            for gt_line in gt_lines:
+                gt_label = gt_line["label"]
+                points = gt_line["points"]
+                category_id = gt_line["category_id"]
+
+                pre_point = points[0]
+                for cur_point in points[1:]:
+                    x1, y1 = int(pre_point[0]), int(pre_point[1])
+                    x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                    thickness = 3
+                    cv2.line(gt_line_map, (x1, y1), (x2, y2), (1), thickness, 8)
+                    pre_point = cur_point
+
+            pred_line_map = np.zeros(batch_input_shape, dtype=np.uint8)
+            single_stage_result = stages_result[0]
+            for curve_line in single_stage_result:
+                curve_line = np.array(curve_line)
+                pre_point = curve_line[0]
+
+                line_cls = pre_point[4]
+                color = color_list[int(line_cls)]
+                x1, y1 = int(pre_point[0]), int(pre_point[1])
+                color = [0, 0, 255]
+
+                point_num = len(curve_line)
+
+                for i, cur_point in enumerate(curve_line[1:]):
+                    x1, y1 = int(pre_point[0]), int(pre_point[1])
+                    x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                    thickness = 3
+                    cv2.line(pred_line_map, (x1, y1), (x2, y2), (1), thickness, 8)
+
+                    cv2.line(img_show, (x1, y1), (x2, y2), color, thickness, 8)
+                    line_orient = cal_points_orient(pre_point, cur_point)
+
+                    if i % 5 == 0:
+                        orient = pre_point[5]
+                        if orient != -1:
+                            reverse = False  # 代表反向是否反了
+                            orient_diff = abs(line_orient - orient)
+                            if orient_diff > 180:
+                                orient_diff = 360 - orient_diff
+
+                            if orient_diff > 90:
+                                reverse = True
+
+                            # color = (0, 255, 0)
+                            # if reverse:
+                            #     color = (0, 0, 255)
+
+                            # 绘制预测的方向
+                            # 转个90度,指向草地
+                            orient = orient + 90
+                            if orient > 360:
+                                orient = orient - 360
+
+                            # img_origin = draw_orient(img_origin, pre_point, orient, arrow_len=30, color=color)
+
+                    if i == point_num // 2:
+                        line_orient = line_orient + 90
+                        if line_orient > 360:
+                            line_orient = line_orient - 360
+                        img_show = draw_orient(img_show, pre_point, line_orient, arrow_len=50, color=color)
+
+
+                    pre_point = cur_point
+
+            # show heatmap
+            # plt.imshow(heatmap_map_seg)
+            # plt.imshow(heatmap_map_emb)
+            # plt.show()
+            all_loss = 0
+            for _loss in loss.keys():
+                print(_loss, loss[_loss].detach().cpu().numpy())
+                all_loss = all_loss + loss[_loss].detach().cpu().numpy()
+
+            # show result
+            plt.subplot(2, 2, 1)
+            plt.imshow(img_show[:, :, ::-1])
+
+            plt.subplot(2, 2, 2)
+            plt.imshow(gt_line_map)
+
+            plt.subplot(2, 2, 3)
+            # plt.imshow(pred_line_map)
+            plt.imshow(heatmap_map_seg)
+
+            plt.subplot(2, 2, 4)
+            # plt.imshow(heatmap_map_emb)
+            # plt.imshow(heatmap_map_cls)
+            # plt.imshow(heatmap_map_covered)
+            plt.imshow(heatmap_map_emb)
+
+            s_name = "loss_" + str(round(all_loss, 2)) + "_" + img_name
+            s_path = os.path.join(save_root, s_name)
+            plt.savefig(s_path, dpi=300)
+
+            plt.show()
+            exit(1)
+
+
 if __name__ == '__main__':
     # 用来查看model预测结果的正确性
-    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/20230803_150518/vis_data/config.py"
-    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/20230803_150518/epoch_200.pth"
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/gbld_debug_config_no_dcn_v0.2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/epoch_250.pth"
+
+    # 服务器
+    # root = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop"
+
+    # 本地
+    # root = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop_batch_12"
+    # config_path = root + "/gbld_debug_config_no_dcn_v0.2.py"
+    # checkpoint_path = root + "/epoch_250.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/gbld_debug_config_no_dcn_v0.2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/epoch_250.pth"
+
+    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/gbld_debug_config_no_dcn_v0.2_1013.py"
+    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/epoch_250.pth"
+
+    # 调试遮挡情况
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/epoch_250.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered2/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered2/epoch_250.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered3/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered3/epoch_250.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/epoch_250.pth"
+
 
     print("config_path:", config_path)
-    main(config_path, checkpoint_path)
+    # 对比gt和pred的区别
+    # main(config_path, checkpoint_path)
+
+    # 用来可视化预测的结果, heatmap, 输入形式为图片
+    # debug_model_infer_heatmap(config_path, checkpoint_path)
+
+    # 用来查看sample的loss情况, 输入形式包括图片和json
+    debug_model_infer_loss(config_path, checkpoint_path)
+
+    print("end")

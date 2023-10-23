@@ -16,6 +16,7 @@ from mmengine.runner import Runner
 import numpy as np
 from mmdet3d.utils import replace_ceph_backend
 from mmengine.evaluator import Evaluator
+from tqdm import tqdm
 
 
 #----------------------------------------------调试模型构建----------------------------------------------
@@ -335,7 +336,7 @@ def debug_model_infer(cfg, args):
     val_evaluator = build_evaluator(val_evaluator)
 
     # for idx, data_batch in enumerate(train_data_loader):
-    for idx, data_batch in enumerate(val_data_loader):
+    for idx, data_batch in enumerate(tqdm(val_data_loader, desc="val_data_loader")):
         # 调用model的data_preprocessor进行处理后
         # 合并为["imgs"], Det3DDataPreprocessor在将所有图像进行堆叠的时候,会根据一个size的倍数进行paddng,同时会根据最大的img-size进行stack
         # 在右下角进行padding的同时也不会影响det的label坐标
@@ -365,10 +366,10 @@ def debug_model_infer(cfg, args):
         # 采用evaluator进行测评
         val_evaluator.process(data_samples=results, data_batch=data_batch)
 
-        if idx == 2:
-            break
+        # if idx == 2:
+        #     break
 
-        if 1:
+        if 0:
             # 根据预测的结果进行可视化
             for batch_id, result in enumerate(results):
                 img = data_batch["inputs"]["imgs"][batch_id]
@@ -429,26 +430,25 @@ def debug_model_infer(cfg, args):
                         cv2.line(img_show, (x1, y1), (x2, y2), (0, 255, 0), thickness, 8)
                         pre_point = cur_point
 
-                plt.subplot(4, 1, 1)
-                plt.imshow(gt_line_map)
-
-                plt.subplot(4, 1, 2)
-                plt.imshow(pred_line_map)
-
-                plt.subplot(4, 1, 3)
-                plt.imshow(img[:, :, ::-1])
-
-                plt.subplot(4, 1, 4)
-                plt.imshow(img_show[:, :, ::-1])
-                plt.show()
-
-                cv2.imwrite(os.path.join(save_root, "debug_model_test.jpg"), img_show)
-                exit(1)
+                # plt.subplot(4, 1, 1)
+                # plt.imshow(gt_line_map)
+                #
+                # plt.subplot(4, 1, 2)
+                # plt.imshow(pred_line_map)
+                #
+                # plt.subplot(4, 1, 3)
+                # plt.imshow(img[:, :, ::-1])
+                #
+                # plt.subplot(4, 1, 4)
+                # plt.imshow(img_show[:, :, ::-1])
+                # plt.show()
+                #
+                # cv2.imwrite(os.path.join(save_root, "debug_model_test.jpg"), img_show)
+                # exit(1)
 
     # 测评的结果
     metrics = val_evaluator.evaluate(len(val_data_loader.dataset))
     print(metrics)
-
 
 
 if __name__ == '__main__':
@@ -458,8 +458,14 @@ if __name__ == '__main__':
 
     # 用来调试kpi的测评情况
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/20230803_150518/vis_data/config.py"
-    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
-    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/epoch_200.pth"
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/epoch_200.pth"
+
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/gbld_debug_config_no_dcn_v0.2_1013.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/epoch_250.pth"
+
+    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/gbld_debug_config_no_dcn_datasetv2.py"
+    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/epoch_200.pth"
 
     print("config_path:", config_path)
     main(config_path, checkpoint_path)

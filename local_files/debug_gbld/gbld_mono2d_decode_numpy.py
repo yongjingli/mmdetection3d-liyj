@@ -1,9 +1,16 @@
-import torch
-import torch.nn as nn
-from mmengine.model import BaseModule
+# import torch
+# import torch.nn as nn
+# from mmengine.model import BaseModule
 import math
-from mmdet3d.registry import MODELS
+import matplotlib.pyplot as plt
+# from mmdet3d.registry import MODELS
 import numpy as np
+import cv2
+
+color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
+              (230, 216, 173), (128, 0, 128), (203, 192, 255), (238, 130, 238), (130, 0, 75),
+              (169, 169, 169), (0, 69, 255)]  # [纯红、纯绿、纯蓝、金色、纯黄、天蓝、紫色、粉色、紫罗兰、藏青色、深灰色、橙红色]
+
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -203,8 +210,11 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
     long_lines = piecewise_lines
     final_lines = []
     while len(long_lines) > 1:
+        # 选择第一条线
         current_line = long_lines[0]
         current_endpoints = [current_line[0], current_line[-1]]
+
+        # 其他线
         other_lines = long_lines[1:]
         other_endpoints = []
         for o_line in other_lines:
@@ -212,6 +222,8 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
             other_endpoints.append(o_line[-1])
         point_ids = [None, None]
         min_dist = 10000
+
+        # 对于选择线的两个端点, 在其他线中的所有端点, 查找与两个选择端点距离最近的距离
         for i, c_end in enumerate(current_endpoints):
             for j, o_end in enumerate(other_endpoints):
                 distance = compute_point_distance(c_end, o_end)
@@ -219,9 +231,13 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
                     point_ids[0] = i
                     point_ids[1] = j
                     min_dist = distance
+
+        # 如果两个选择端点存在距离小于阈值的端点, 则两条线合并, 合并完毕后继续进行类似的合并操作
         if min_dist < endpoint_distance:
             adjacent_line = other_lines[point_ids[1] // 2]
             other_lines.remove(adjacent_line)
+
+            # 判断两条合并线的左右关系, 进行合并
             if point_ids[0] == 0 and point_ids[1] % 2 == 0:
                 adjacent_line.reverse()
                 left_line = adjacent_line
@@ -252,6 +268,8 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
             # best_id = best_ids[1]
             # right_line = right_line[best_id:]
             long_lines = other_lines + [left_line + right_line]
+
+        # 如果如果两个选择端点不存在距离小于阈值的端点, 给线将直接输出
         else:
             final_lines.append(current_line)
             long_lines = other_lines
@@ -261,7 +279,9 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
 
 
 def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map,
-                          pred_orient_map=None, pred_visible_map=None, pred_hanging_map=None, pred_covered_map=None):
+                          pred_orient_map=None, pred_visible_map=None, pred_hanging_map=None,
+                          pred_covered_map=None):
+
     existing_points = single_line.copy()
     piecewise_lines = []
     while len(existing_points) > 0:
@@ -275,6 +295,8 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
                 selected_points.append(e_pnt)
             else:
                 alternative_points.append(e_pnt)
+
+        # 在y方向进行延伸
         y -= 1
         while len(alternative_points) > 0:
             near_points, far_points = [], []
@@ -293,6 +315,8 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
             else:
                 alternative_points = outliers + far_points
                 y -= 1
+
+        # 在x方向进行延伸
         selected_points = extend_endpoints(selected_points, single_line)
         piecewise_line = arrange_points_to_line(
             selected_points, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map, pred_orient_map,
@@ -301,13 +325,72 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
         piecewise_lines.append(piecewise_line)
         existing_points = alternative_points
+    #
+    # grid_size = 4
+    # img_h, img_w = x_map.shape
+    # img_piecewise_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+    # for i, raw_line in enumerate(piecewise_lines):
+    #     color = color_list[i]
+    #     pre_point = raw_line[0]
+    #
+    #     for cur_point in raw_line[1:]:
+    #         # x, y = cur_point[:2]
+    #         # img_piecewise_lines[y, x] = color
+    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
+    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
+    #
+    #         cv2.line(img_piecewise_lines, (x1, y1), (x2, y2), color, 1, 8)
+    #         pre_point = cur_point
+    #
+    #     start_point = raw_line[0]
+    #     end_point = raw_line[-1]
+    #     cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
+    #     cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
+    #
+    # plt.subplot(2, 1, 1)
+    # plt.imshow(confidence_map)
+    # plt.subplot(2, 1, 2)
+    # plt.imshow(img_piecewise_lines)
+    # plt.show()
+    # exit(1)
+
     if len(piecewise_lines) == 0:
         return []
     elif len(piecewise_lines) == 1:
         exact_lines = piecewise_lines[0]
     else:
-        exact_lines = connect_piecewise_lines(piecewise_lines)[0]
-        # exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=40)[0]
+
+        exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)[0]
+        # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
+    #
+    # grid_size = 4
+    # img_h, img_w = x_map.shape
+    # img_exact_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+    # # for i, raw_line in enumerate([exact_lines]):
+    # for i, raw_line in enumerate(all_exact_lines):
+    #     color = color_list[i]
+    #     pre_point = raw_line[0]
+    #
+    #     for cur_point in raw_line[1:]:
+    #         # x, y = cur_point[:2]
+    #         # img_piecewise_lines[y, x] = color
+    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
+    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
+    #
+    #         cv2.line(img_exact_lines, (x1, y1), (x2, y2), color, 1, 8)
+    #         pre_point = cur_point
+    #     start_point = raw_line[0]
+    #     end_point = raw_line[-1]
+    #     cv2.circle(img_exact_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
+    #     cv2.circle(img_exact_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
+    #
+    # plt.subplot(2, 1, 1)
+    # plt.imshow(confidence_map)
+    # plt.subplot(2, 1, 2)
+    # plt.imshow(img_exact_lines)
+    # plt.show()
+    # exit(1)
+
     if exact_lines[0][1] < exact_lines[-1][1]:
         exact_lines.reverse()
     return exact_lines
@@ -360,18 +443,72 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
         piecewise_lines.append(piecewise_line)
         existing_points = alternative_points
-
+    #
+    # grid_size = 4
+    # img_h, img_w = x_map.shape
+    # img_piecewise_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+    # for i, raw_line in enumerate(piecewise_lines):
+    #     color = color_list[i]
+    #     pre_point = raw_line[0]
+    #
+    #     for cur_point in raw_line[1:]:
+    #         # x, y = cur_point[:2]
+    #         # img_piecewise_lines[y, x] = color
+    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
+    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
+    #
+    #         cv2.line(img_piecewise_lines, (x1, y1), (x2, y2), color, 1, 8)
+    #         pre_point = cur_point
+    #
+    #     start_point = raw_line[0]
+    #     end_point = raw_line[-1]
+    #     cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
+    #     cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
+    #
+    # plt.subplot(2, 1, 1)
+    # plt.imshow(confidence_map)
+    # plt.subplot(2, 1, 2)
+    # plt.imshow(img_piecewise_lines)
+    # plt.show()
+    # exit(1)
 
     if len(piecewise_lines) == 0:
         return []
     elif len(piecewise_lines) == 1:
-        # exact_lines = piecewise_lines[0]
+        exact_lines = piecewise_lines[0]
         all_exact_lines = piecewise_lines
     else:
 
         # exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=40)[0]
         all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
-
+    #
+    # grid_size = 4
+    # img_h, img_w = x_map.shape
+    # img_exact_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+    # # for i, raw_line in enumerate([exact_lines]):
+    # for i, raw_line in enumerate(all_exact_lines):
+    #     color = color_list[i]
+    #     pre_point = raw_line[0]
+    #
+    #     for cur_point in raw_line[1:]:
+    #         # x, y = cur_point[:2]
+    #         # img_piecewise_lines[y, x] = color
+    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
+    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
+    #
+    #         cv2.line(img_exact_lines, (x1, y1), (x2, y2), color, 1, 8)
+    #         pre_point = cur_point
+    #     start_point = raw_line[0]
+    #     end_point = raw_line[-1]
+    #     cv2.circle(img_exact_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
+    #     cv2.circle(img_exact_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
+    #
+    # plt.subplot(2, 1, 1)
+    # plt.imshow(confidence_map)
+    # plt.subplot(2, 1, 2)
+    # plt.imshow(img_exact_lines)
+    # plt.show()
+    # exit(1)
     for all_exact_line in all_exact_lines:
         if all_exact_line[0][1] < all_exact_line[-1][1]:
             all_exact_line.reverse()
@@ -391,11 +528,44 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
     ebs = embedding_map[ys, xs]
     raw_lines = cluster_line_points(xs, ys, ebs)
 
+    # 查看聚类的效果
+    # img_h, img_w = x_map.shape
+    # img_emb = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
+    # for i, raw_line in enumerate(raw_lines):
+    #     color = color_list[i]
+    #     for point in raw_line:
+    #         x, y = point
+    #         # img_emb[y, x] = (i + 1) * 100
+    #         img_emb[y, x] = color
+    #
+    # plt.subplot(2, 1, 1)
+    # plt.imshow(mask_map)
+    # plt.subplot(2, 1, 2)
+    # plt.imshow(img_emb)
+    # plt.show()
+
+
     raw_lines = remove_short_lines(raw_lines)
     raw_lines = remove_far_lines(raw_lines)
 
+    # img_h, img_w = x_map.shape
+    # img_filter = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
+    # for i, raw_line in enumerate(raw_lines):
+    #     color = color_list[i]
+    #     for point in raw_line:
+    #         x, y = point
+    #         # img_emb[y, x] = (i + 1) * 100
+    #         img_filter[y, x] = color
+    #
+    # plt.subplot(2, 1, 1)
+    # plt.imshow(mask_map)
+    # plt.subplot(2, 1, 2)
+    # plt.imshow(img_filter)
+    # plt.show()
+
     exact_lines = []
     for each_line in raw_lines:
+        # 只选择最近的single line
         # single_line = serialize_single_line(each_line, x_map, y_map,
         #                                     confidence_map, pred_emb_id,
         #                                     pred_cls_map, pred_orient_map,
@@ -410,7 +580,6 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
                                             pred_cls_map, pred_orient_map,
                                             pred_visible_map, pred_hanging_map, pred_covered_map
                                             )
-
         if len(all_lines) > 0:
             single_line = all_lines[0]
             if len(single_line) > 0:
@@ -420,6 +589,23 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
                 for single_line in all_lines[1:]:
                     if len(single_line) > 50:
                         exact_lines.append(single_line)
+
+    # grid_size = 4
+    # img_h, img_w = x_map.shape
+    # img_serialize = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+    # for i, raw_line in enumerate(exact_lines):
+    #     color = color_list[i]
+    #     for point in raw_line:
+    #         x, y = point[:2]
+    #         # img_emb[y, x] = (i + 1) * 100
+    #         img_serialize[y, x] = color
+    #
+    # plt.subplot(2, 1, 1)
+    # plt.imshow(mask_map)
+    # plt.subplot(2, 1, 2)
+    # plt.imshow(img_serialize)
+    # plt.show()
+    # exit(1)
 
     if len(exact_lines) == 0:
         return []
@@ -434,20 +620,170 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
     return exact_lines
 
 
-@MODELS.register_module()
-class GlasslandBoundaryLine2DDecode(BaseModule):
+# 对点进行拟合
+class FitPoints2Line():
+    def __init__(self):
+        self.fit_degree = [1, 3]    # 整数, 表示拟合多项式的度
+        self.map_size = [608, 960]  # h, w
+        self.fit_margin = 5         # 下面的数据都是大概猜测出来的,需要进行验证
+        self.long_line_thresh = 50
+        self.fit_iteration = 2
+        self.fit_tolerance = 20
 
+    def fit_curve(self, image_points):
+        xs, ys = image_points
+        assert xs.size >= 2, "Too few points to fit a curve."
+        base, max_degree = self.fit_degree
+        deg = min(np.ceil(xs.size / base), max_degree)
+        coefficients = np.polyfit(xs, ys, deg)
+        polynomial = np.poly1d(coefficients)
+        fitting_ys = polynomial(xs).round().astype(np.int)
+        h, w = self.map_size
+        fitting_ys = np.clip(fitting_ys, 0, h - 1)
+        fitting_points = [xs.copy(), fitting_ys]
+        return fitting_points
+
+    def search_inflexion(self, delta_ys, image_points):
+        i_xs, i_ys = image_points
+        indices = np.nonzero(delta_ys == delta_ys.max())[0]
+        for id in indices:
+            inf_x = i_xs[id]
+            inf_y = i_ys[id]
+            vertical_number = np.logical_and(
+                i_xs > inf_x - self.fit_margin, i_xs < inf_x + self.fit_margin
+            ).sum()
+            horizontal_number = np.logical_and(
+                i_ys > inf_y - self.fit_margin, i_ys < inf_y + self.fit_margin
+            ).sum()
+            if vertical_number <= horizontal_number:
+                left_num = (i_xs <= inf_x).sum()
+                right_num = (i_xs >= inf_x).sum()
+                if left_num >= self.long_line_thresh and right_num >= self.long_line_thresh:
+                    return ["x", inf_x]
+            else:
+                left_num = (i_ys <= inf_y).sum()
+                right_num = (i_ys >= inf_y).sum()
+                if left_num >= self.long_line_thresh and right_num >= self.long_line_thresh:
+                    return ["y", inf_y]
+        return None
+
+    def split_fitting_points(self, inflexion, image_points, confidences, fitting_points):
+        axis, threshold = inflexion
+        i_xs, i_ys = image_points
+        f_xs, f_ys = fitting_points
+        if axis == "x":
+            left_mask = i_xs <= threshold
+            right_mask = i_xs >= threshold
+        else:
+            left_mask = i_ys <= threshold
+            right_mask = i_ys >= threshold
+        left_i_xs, right_i_xs = i_xs[left_mask], i_xs[right_mask]
+        if left_i_xs[0] > right_i_xs[0]:
+            left_i_xs, right_i_xs = right_i_xs, left_i_xs
+            left_mask, right_mask = right_mask, left_mask
+        left_i_ys, right_i_ys = i_ys[left_mask], i_ys[right_mask]
+        left_confs, right_confs = confidences[left_mask], confidences[right_mask]
+        left_f_xs, right_f_xs = f_xs[left_mask], f_xs[right_mask]
+        left_f_ys, right_f_ys = f_ys[left_mask], f_ys[right_mask]
+        return (
+            [left_i_xs, left_i_ys],
+            [right_i_xs, right_i_ys],
+            left_confs,
+            right_confs,
+            [left_f_xs, left_f_ys],
+            [right_f_xs, right_f_ys],
+        )
+
+    # 调用入口
+    def fit_points_to_line(self, selected_points, x_map, y_map, confidence_map):
+        selected_points = np.array(selected_points)
+        xs, ys = selected_points[:, 0], selected_points[:, 1]
+        image_xs = x_map[ys, xs]
+        image_ys = y_map[ys, xs]
+        confidences = confidence_map[ys, xs]
+        indices = image_xs.argsort()
+        image_xs = image_xs[indices]
+        image_ys = image_ys[indices]
+        confidences = confidences[indices]
+
+        image_points = [[image_xs, image_ys]]
+        confidences = [confidences]
+        need_fitting = [True]
+        fitting_points = [[]]
+
+        for iter in range(self.fit_iteration):
+            finished_image_points = []
+            finished_confidences = []
+            finished_need_fitting = []
+            finished_fitting_points = []
+            for i_pnts, confs, n_fit, f_pnts in zip(
+                image_points, confidences, need_fitting, fitting_points
+            ):
+                if n_fit == True:
+                    f_pnts = self.fit_curve(i_pnts)
+                    delta_ys = abs(f_pnts[1] - i_pnts[1])
+                    if delta_ys.max() >= self.fit_tolerance:
+                        inflexion = self.search_inflexion(delta_ys, i_pnts)
+                        if inflexion != None:
+                            (
+                                left_i_pnts,
+                                right_i_pnts,
+                                left_confs,
+                                right_confs,
+                                left_f_pnts,
+                                right_f_pnts,
+                            ) = self.split_fitting_points(inflexion, i_pnts, confs, f_pnts)
+                            finished_image_points.append(left_i_pnts)
+                            finished_image_points.append(right_i_pnts)
+                            finished_confidences.append(left_confs)
+                            finished_confidences.append(right_confs)
+                            finished_need_fitting.append(True)
+                            finished_need_fitting.append(True)
+                            finished_fitting_points.append(left_f_pnts)
+                            finished_fitting_points.append(right_f_pnts)
+                        else:
+                            finished_image_points.append(i_pnts)
+                            finished_confidences.append(confs)
+                            finished_need_fitting.append(False)
+                            finished_fitting_points.append(f_pnts)
+                    else:
+                        finished_image_points.append(i_pnts)
+                        finished_confidences.append(confs)
+                        finished_need_fitting.append(False)
+                        finished_fitting_points.append(f_pnts)
+                else:
+                    finished_image_points.append(i_pnts)
+                    finished_confidences.append(confs)
+                    finished_need_fitting.append(n_fit)
+                    finished_fitting_points.append(f_pnts)
+            image_points = finished_image_points
+            confidences = finished_confidences
+            need_fitting = finished_need_fitting
+            fitting_points = finished_fitting_points
+        final_line = []
+        for i, (f_pnts, confs) in enumerate(zip(fitting_points, confidences)):
+            f_xs, f_ys = f_pnts
+            for j, pnt in enumerate(zip(f_xs, f_ys, confs)):
+                if i >= 1 and j == 0:
+                    last_pnt = final_line.pop()
+                    pnt = (pnt[0], (0.5 * (pnt[1] + last_pnt[1])).round().astype(np.int), pnt[2])
+                final_line.append(pnt)
+        return final_line
+
+
+# @MODELS.register_module()
+# class GlasslandBoundaryLine2DDecode(BaseModule):
+class GlasslandBoundaryLine2DDecodeNumpy():
     def __init__(self,
                  confident_t,
                  grid_size=4,
                  init_cfg=dict(type='Uniform', layer='Embedding')):
-        super().__init__(init_cfg)
+        # super().__init__(init_cfg)
         self.confident_t = confident_t   # 预测seg-heatmap的阈值
         self.grid_size = grid_size
         self.line_map_range = [0, -1]    # 不进行过滤
 
-        self.noise_filter = nn.MaxPool2d([3, 1], stride=1, padding=[1, 0])  # 去锯齿
-
+        # self.noise_filter = nn.MaxPool2d([3, 1], stride=1, padding=[1, 0])  # 去锯齿
     def get_line_cls(self, exact_curse_lines_multi_cls):
         output_curse_lines_multi_cls = []
         for exact_curse_lines in exact_curse_lines_multi_cls:
@@ -551,24 +887,23 @@ class GlasslandBoundaryLine2DDecode(BaseModule):
         # mask = seg_pred == seg_max_pooling
         # seg_pred[~mask] = -1e6
 
-        seg_pred = seg_pred.cpu().detach().numpy()
-        offset_pred = offset_pred.cpu().detach().numpy()
-        seg_emb_pred = seg_emb_pred.cpu().detach().numpy()
-        connect_emb_pred = connect_emb_pred.cpu().detach().numpy()
-        cls_pred = cls_pred.cpu().detach().numpy()
+        # seg_pred = seg_pred.cpu().detach().numpy()
+        # offset_pred = offset_pred.cpu().detach().numpy()
+        # seg_emb_pred = seg_emb_pred.cpu().detach().numpy()
+        # connect_emb_pred = connect_emb_pred.cpu().detach().numpy()
+        # cls_pred = cls_pred.cpu().detach().numpy()
 
-        if orient_pred is not None:
-            orient_pred = orient_pred.cpu().detach().numpy()
-
-        if visible_pred is not None:
-            visible_pred = visible_pred.cpu().detach().numpy()
-
-        if hanging_pred is not None:
-            hanging_pred = hanging_pred.cpu().detach().numpy()
-
-        if covered_pred is not None:
-            covered_pred = covered_pred.cpu().detach().numpy()
-
+        # if orient_pred is not None:
+        #     orient_pred = orient_pred.cpu().detach().numpy()
+        #
+        # if visible_pred is not None:
+        #     visible_pred = visible_pred.cpu().detach().numpy()
+        #
+        # if hanging_pred is not None:
+        #     hanging_pred = hanging_pred.cpu().detach().numpy()
+        #
+        # if covered_pred is not None:
+        #     covered_pred = covered_pred.cpu().detach().numpy()
         curse_lines_with_cls = self.decode_curse_line(seg_pred, offset_pred[0:1],
                                                   offset_pred[1:2], seg_emb_pred, connect_emb_pred,
                                                       cls_pred, orient_pred, visible_pred,
@@ -697,3 +1032,9 @@ class GlasslandBoundaryLine2DDecode(BaseModule):
             exact_lines.append(_exact_lines)
 
         return exact_lines
+
+
+if __name__ == "__main__":
+    print("Start")
+    glass_land_boundary_line_2d_decode_numpy = GlasslandBoundaryLine2DDecodeNumpy(confident_t=0.2)
+    print("End")

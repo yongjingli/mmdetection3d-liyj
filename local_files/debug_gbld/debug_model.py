@@ -207,14 +207,14 @@ def debug_model(cfg):
     # out = debug_model(batch_inputs_dict, data_samples=batch_img_metas, mode="predict")
     # # out[0]._pred_instances.single_result    # TODO 结果的正确性需要调试
 
-
     out = debug_model(batch_inputs_dict, data_samples=batch_img_metas, mode="loss")
     print(out)
 
 
 if __name__ == '__main__':
-    config_path = "./projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
+    # config_path = "./projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
     # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
+    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2.py"
 
     # 设置不同的模式,对model进行调试,是程序的入口,需要在定义的位置进行打断点调试
     print("config_path:", config_path)

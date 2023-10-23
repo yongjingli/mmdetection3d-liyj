@@ -131,13 +131,14 @@ model = dict(
             type='GbldEmbLoss',
                 pull_margin=0.5,
                 push_margin=1.0,
-                loss_weight=1.5),
+                loss_weight=1.5),  # 1.5
 
         loss_connect_emb=dict(
             type='GbldEmbLoss',
             pull_margin=0.5,
             push_margin=1.0,
-            loss_weight=1.0),
+            # loss_weight=1.0),
+            loss_weight=1.0),   # 1.0
 
         loss_cls=dict(
             type='GbldClsLoss',
@@ -200,7 +201,7 @@ train_dataloader = dict(
             dict(type='GgldLoadLines', name="load_gt_lines"),
 
             # 该方法实现还有问题, TODO
-            dict(type='GgldRandomCrop', prob=0.5, max_margin_scale=0.4, keep_ratio=True),
+            # dict(type='GgldRandomCrop', prob=0.5, max_margin_scale=0.4, keep_ratio=True),
 
             dict(type='GgldResize', scale=input_size,
             # keep_ratio=False,

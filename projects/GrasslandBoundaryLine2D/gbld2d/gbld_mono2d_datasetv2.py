@@ -16,7 +16,7 @@ import copy
 
 @DATASETS.register_module()
 # class GbldMono2dDataset(Det3DDataset):
-class GbldMono2dDataset(BaseDataset):
+class GbldMono2dDatasetV2(BaseDataset):
     def __init__(self,
                  data_root: str,
                  ann_file: str,
@@ -77,7 +77,39 @@ class GbldMono2dDataset(BaseDataset):
             points_remap = np.array(points_remap)
             # remap_annos.append({'label': label, 'points': points_remap, 'index': index, 'same_line_id': index})
             # 新增label对应的类id, category_id
-            remap_anns.append({'label': label, 'points': points_remap, 'index': i, 'line_id': line_id, "category_id": category_id})
+
+            # 新增点的类别、可见属性、悬空属性和被草遮挡属性等
+            points_type = shape["points_type"]
+            points_visible = shape["points_visible"]
+            points_hanging = shape["points_hanging"]
+            points_covered = shape["points_covered"]
+
+            # 将字符类型转为与category_id相同
+            for point_type in points_type:
+                point_type[0] = self.metainfo["classes"].index(point_type[0])
+
+            # point_vis为true的情况下为可见
+            for point_visible in points_visible:
+                point_visible[0] = 1 if point_visible[0] == "true" else 0
+
+            # point_hang为true的情况为悬空
+            for point_hanging in points_hanging:
+                point_hanging[0] = 1 if point_hanging[0] == "true" else 0
+
+            # point_covered为true的情况为被草遮挡
+            for point_covered in points_covered:
+                point_covered[0] = 1 if point_covered[0] == "true" else 0
+
+            points_type = np.array(shape["points_type"])
+            points_visible = np.array(shape["points_visible"])
+            points_hanging = np.array(shape["points_hanging"])
+            points_covered = np.array(shape["points_covered"])
+
+            remap_anns.append({'label': label, 'points': points_remap, 'index': i,
+                               'line_id': line_id, "category_id": category_id,
+                               'points_type': points_type, 'points_visible': points_visible,
+                               'points_hanging': points_hanging, 'points_covered': points_covered,
+                               })
 
         ann_info["gt_lines"] = remap_anns
         return ann_info
@@ -88,8 +120,11 @@ class GbldMono2dDataset(BaseDataset):
         img_path = info["img"]
         ann_path = info["ann"]
 
-        # img_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230927_mmdet3d/train/images/1695031543693612696.jpg"
-        # ann_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230927_mmdet3d/train/jsons/1695031543693612696.json"
+        # img_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images/1696991348.057879.jpg"
+        # ann_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/jsons/1696991348.057879.json"
+
+        # img_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images/1696991348.45783.jpg"
+        # ann_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/jsons/1696991348.45783.json"
 
         img_name = os.path.split(img_path)[-1]
         ann_name = os.path.split(ann_path)[-1]

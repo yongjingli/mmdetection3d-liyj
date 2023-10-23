@@ -354,7 +354,9 @@ def debug_dataset(cfg):
             # "gt_instances".bboxes
 
             # out = debug_model(batch_inputs_dict, data_samples=batch_img_metas, mode="loss")
-            debug_model(data_batch["inputs"], data_batch["data_samples"],  mode="loss")
+
+            loss = debug_model(data_batch["inputs"], data_batch["data_samples"],  mode="loss")
+            predict = debug_model(data_batch["inputs"], data_batch["data_samples"],  mode="predict")
 
             print(isinstance(data_batch, list))
 
@@ -366,7 +368,9 @@ def debug_dataset(cfg):
 
 
 if __name__ == '__main__':
-    config_path = "./projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
+    # config_path = "./projects/GlasslandBoundaryLine2D/configs/gbld_debug_config.py"
+    # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2.py"
+    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_datasetv2.py"
     # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
 
     # 用与loss的调试,这里主要是启动程序的入口, 需要在loss的定义处打断点进行调试

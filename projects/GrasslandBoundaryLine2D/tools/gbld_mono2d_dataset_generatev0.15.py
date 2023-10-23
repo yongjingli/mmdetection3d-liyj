@@ -7,7 +7,7 @@ from tqdm import tqdm
 import numpy as np
 import mmengine
 from mmengine.fileio import join_path, list_from_file, load
-from dense_line_points import dense_line_points
+from dense_line_points import dense_line_points, dense_line_points_by_interp
 
 color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
               (221, 160, 221),  (128, 0, 128), (203, 192, 255), (238, 130, 238), (0, 69, 255),
@@ -52,9 +52,9 @@ def draw_curce_line_on_img(img, points, cls_name, color=(0, 255, 0)):
     return img
 
 
-def parse_cvat_xml_2_lld_data(base_infos):
+def parse_v02_data_2_lld_data(base_infos):
     # cvat_xml_path = "/media/dell/Elements SE/liyj/data/collect_data_20230720/rosbag2_2023_07_20-18_24_24/glass_edge_overfit_20230721/annotations.xml"
-    cvat_xml_path = base_infos["cvat_xml_path"]
+    # cvat_xml_path = base_infos["cvat_xml_path"]
 
     src_root = base_infos["src_root"]
     dst_root = base_infos["dst_root"]
@@ -75,33 +75,73 @@ def parse_cvat_xml_2_lld_data(base_infos):
         os.mkdir(os.path.join(dst_root, 'train', tmp))
         os.mkdir(os.path.join(dst_root, 'test', tmp))
 
-    from xml.dom.minidom import parse
-    import xml.dom.minidom
+    img_root = os.path.join(src_root, "images")
+    label_root = os.path.join(src_root, "json")
+    image_names = [name for name in os.listdir(img_root) if name[-4:] in [".jpg", '.png']]
 
-    # 使用minidom解析器打开 XML 文档
-    DOMTree = xml.dom.minidom.parse(cvat_xml_path)
-    collection = DOMTree.documentElement
-
-    images = collection.getElementsByTagName("image")
+    # from xml.dom.minidom import parse
+    # import xml.dom.minidom
+    #
+    # # 使用minidom解析器打开 XML 文档
+    # DOMTree = xml.dom.minidom.parse(cvat_xml_path)
+    # collection = DOMTree.documentElement
+    #
+    # images = collection.getElementsByTagName("image")
     if max_num != -1:
-        images = images[:max_num]
+        image_names = image_names[:max_num]
 
     count = 0
-    for image in tqdm(images):
+    for image_name in tqdm(image_names):
         test = True if count % 10 == 0 else False
         # test = False
         root_name = "test" if test else "train"
         s_root = os.path.join(dst_root, root_name)
         count = count + 1
 
-        image_name = image.getAttribute("name")
+        # image_name = image.getAttribute("name")
         # # # TODO
         # if image_name != "1689848680876640844.jpg":
         #     continue
         # print(image_name)
         # exit(1)
+        json_path = os.path.join(label_root, image_name[:-4] + ".json")
+        with open(json_path, "r") as fp:
+            labels = json.load(fp)
 
-        poly_lines = image.getElementsByTagName('polyline')
+        # all_points = []
+        # all_attr_type = []
+        # all_attr_visible = []
+        # all_attr_hanging = []
+        # lines_intersect_indexs = []
+
+        poly_lines = []
+        for label in labels:
+            intersect_index = np.array(label["intersect_index"])
+            points = np.array(label["points"])
+            attr_type = np.array(label["type"]).reshape(-1, 1)
+            attr_visible = np.array(label["visible"]).reshape(-1, 1)
+            attr_hanging = np.array(label["hanging"]).reshape(-1, 1)
+
+            # 投票得到线的整体类别
+            attr_type = attr_type.reshape(-1).tolist()
+            poly_line_name = max(attr_type, key=attr_type.count)
+            poly_line = {"points": points, "label": poly_line_name}
+            poly_lines.append(poly_line)
+
+
+            # print(points.shape, attr_type.shape, attr_visible.shape, attr_hanging.shape)
+            # line = np.concatenate([points, attr_type, attr_visible, attr_hanging], axis=1)
+            #
+            # lines.append(line)
+            # all_points.append(points)
+            # all_attr_type.append(attr_type)
+            # all_attr_visible.append(attr_visible)
+            # all_attr_hanging.append(attr_hanging)
+            # lines_intersect_indexs.append(intersect_index)
+
+
+
+        # poly_lines = image.getElementsByTagName('polyline')
 
         # 解析标注数据,得到curve_lines
         # poly_line_pts, curve_id分别代表当前曲线的点, 当前曲线是否为同一曲线
@@ -109,7 +149,8 @@ def parse_cvat_xml_2_lld_data(base_infos):
         poly_line_names = {}
         curve_count = 1
         for i, poly_line in enumerate(poly_lines):
-            poly_line_name = poly_line.getAttribute("label")
+            # poly_line_name = poly_line.getAttribute("label")
+            poly_line_name = poly_line["label"]
 
             # 进行名称的转换
             if poly_line_name not in TYPE_DICT.keys() and poly_line_name not in TYPE_DICT.values():
@@ -120,7 +161,8 @@ def parse_cvat_xml_2_lld_data(base_infos):
 
 
             # poly_line_pts = poly_line.getAttribute("points")
-            poly_line_pts = poly_line.getAttribute("points")
+            # poly_line_pts = poly_line.getAttribute("points")
+            poly_line_pts = poly_line["points"]
 
             # curve_id = poly_line.getAttribute("id")
             # attr_name = poly_line.getElementsByTagName("attribute")[0].getAttribute("name")
@@ -129,12 +171,12 @@ def parse_cvat_xml_2_lld_data(base_infos):
             curve_id = i
 
             # 数据解析为numpy的形式
-            poly_line_pts_np = []
-            for poly_line_pt in poly_line_pts.split(";"):
-                pts = [float(d) for d in poly_line_pt.split(",")]
-                poly_line_pts_np.append(pts)
-            poly_line_pts_np = np.array(poly_line_pts_np)
-            poly_line_pts = poly_line_pts_np
+            # poly_line_pts_np = []
+            # for poly_line_pt in poly_line_pts.split(";"):
+            #     pts = [float(d) for d in poly_line_pt.split(",")]
+            #     poly_line_pts_np.append(pts)
+            # poly_line_pts_np = np.array(poly_line_pts_np)
+            # poly_line_pts = poly_line_pts_np
 
             # if poly_line_name not in poly_line_names.keys():
             #     curve_id = curve_count
@@ -144,13 +186,13 @@ def parse_cvat_xml_2_lld_data(base_infos):
             # else:
             #     curve_id = poly_line_names[poly_line_name]
 
-            print(poly_line_name, curve_id)
+            # print(poly_line_name, curve_id)
 
             curve_lines.append([poly_line_pts, curve_id, poly_line_name])
 
         # 读取img的信息, 并缩放为指定尺寸
-        img_path = os.path.join(src_root, image_name)
-        print(img_path)
+        img_path = os.path.join(img_root, image_name)
+        # print(img_path)
         img = cv2.imread(img_path)
         img_h, img_w, _ = img.shape
 
@@ -185,7 +227,8 @@ def parse_cvat_xml_2_lld_data(base_infos):
 
             # 将点进行稠密化
             if dense_points:
-                points = dense_line_points(img_res, points)
+                # points = dense_line_points(img_res, points)
+                points = dense_line_points_by_interp(img_res, points)
 
             item = {
                 "label": cls_name,
@@ -274,7 +317,36 @@ def generate_mmdet3d_trainval_infos(generate_dataset_infos):
         print("raw_data_list:", raw_data_list)
 
 
+def combine_images_jsons():
+    root = "/media/dell/Egolee1/liyj/data/label_data/gbld_from_label_system/gbld_20231012_v0.2"
+    # 16  17  22  23  24  25  26
+    sub_dirs = ["16",  "17",  "22",  "23",  "24",  "25",  "26"]
+
+    dst_dir = "all"
+    dst_root = os.path.join(root, dst_dir)
+    if os.path.exists(dst_root):
+        shutil.rmtree(dst_root)
+    os.mkdir(dst_root)
+
+    names = ["images", "json"]
+    for name in names:
+        os.mkdir(os.path.join(dst_root, name))
+
+    for sub_dir in tqdm(sub_dirs, desc=sub_dirs):
+        src_root = os.path.join(root, sub_dir)
+        for name in names:
+            src_root2 = os.path.join(src_root, name)
+            dst_root2 = os.path.join(dst_root, name)
+
+            for file_name in os.listdir(src_root2):
+                shutil.copy(os.path.join(src_root2, file_name),
+                            os.path.join(dst_root2, file_name))
+
+
 if __name__ == "__main__":
+    # 在v0.2的版本中,采用分段标注的方式和分配属性的方式
+    # gbld_mono2d_dataset_generatev0.15.py, 为读取v0.2版本的数据,然后生成V0.1形式的数据, 为临时的过渡方式
+
     # 用来生成数据集和相应的infos
     generate_dataset_infos = {
         "type": 'image',
@@ -282,7 +354,7 @@ if __name__ == "__main__":
         # "dst_h": 1080,
         "dst_w": -1,     # 不对图像进行resize等操作
         "dst_h": -1,
-        "max_num": -1,  # default -1
+        "max_num": -1,  # default -1, 全部的数据
 
         "metainfo": {
             'dataset': 'GbldMono2dDataset',
@@ -296,10 +368,10 @@ if __name__ == "__main__":
         # "dst_root": "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230926_mmdet3d",
         # "cvat_xml_path": "/home/dell/下载/2/annotations.xml"
 
-        #  20230926
-        "src_root": "/media/dell/Egolee1/liyj/label_data/20230926/dataset_29/images",
-        "dst_root": "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230927_mmdet3d",
-        "cvat_xml_path": "/media/dell/Egolee1/liyj/label_data/20230926/dataset_29/annotations.xml",
+        #  20231013
+        "src_root": "/media/dell/Egolee1/liyj/data/label_data/gbld_from_label_system/gbld_20231012_v0.2/28",
+        "dst_root": "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d",
+        # "cvat_xml_path": "/media/dell/Egolee1/liyj/label_data/20230926/dataset_29/annotations.xml",
 
         # 服务器
         #"src_root": "/data-hdd/liyj/data/label_data/20230926/dataset_27/images",
@@ -307,7 +379,10 @@ if __name__ == "__main__":
         #"cvat_xml_path": "/data-hdd/liyj/data/label_data/20230926/dataset_27/annotations.xml"
         }
 
-    parse_cvat_xml_2_lld_data(generate_dataset_infos)
+    # 将文件整理到一个文件夹中
+    # combine_images_jsons()
+
+    # parse_v02_data_2_lld_data(generate_dataset_infos)
 
     # 生成mmdet3d数据加载的相关信息
-    # generate_mmdet3d_trainval_infos(generate_dataset_infos)
+    generate_mmdet3d_trainval_infos(generate_dataset_infos)

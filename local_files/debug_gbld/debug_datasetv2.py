@@ -439,6 +439,10 @@ def debug_dataset(cfg):
                 orient_map_sin = gt_line_maps["orient_map_sin"]
                 orient_map_cos = gt_line_maps["orient_map_cos"]
 
+                gt_confidence_visible = gt_line_maps["gt_confidence_visible"]
+                gt_confidence_hanging = gt_line_maps["gt_confidence_hanging"]
+                gt_confidence_covered = gt_line_maps["gt_confidence_covered"]
+
                 gt_confidence = gt_confidence.cpu().detach().numpy()
                 gt_offset_x = gt_offset_x.cpu().detach().numpy()
                 gt_offset_y = gt_offset_y.cpu().detach().numpy()
@@ -451,8 +455,11 @@ def debug_dataset(cfg):
 
                 orient_map_mask = orient_map_mask.cpu().detach().numpy()
                 orient_map_sin = orient_map_sin.cpu().detach().numpy()
-
                 orient_map_cos = orient_map_cos.cpu().detach().numpy()
+
+                gt_confidence_visible = gt_confidence_visible.cpu().detach().numpy()
+                gt_confidence_hanging = gt_confidence_hanging.cpu().detach().numpy()
+                gt_confidence_covered = gt_confidence_covered.cpu().detach().numpy()
 
                 # 将orient转回到角度表示
                 # orients = np.arctan2(orient_map_sin, orient_map_cos) / np.pi * 180
@@ -466,30 +473,61 @@ def debug_dataset(cfg):
                 # else:
                 #     orient = None
 
-                plt.subplot(2, 2, 1)
+                plt.subplot(3, 3, 1)
                 plt.imshow(gt_confidence[0])
 
-                plt.subplot(2, 2, 2)
+                plt.subplot(3, 3, 2)
+                plt.imshow(foreground_mask[0])
+
+
+                plt.subplot(3, 3, 3)
                 plt.imshow(gt_line_index[0])
 
-                plt.subplot(2, 2, 3)
+                plt.subplot(3, 3, 4)
                 plt.imshow(orient_map_mask[0])
 
-                plt.subplot(2, 2, 4)
+                plt.subplot(3, 3, 5)
                 plt.imshow(img_show[:, :, ::-1])
+
+                # classes = [
+                #     'road_boundary_line',
+                #     'bushes_boundary_line',
+                #     'fence_boundary_line',
+                #     'stone_boundary_line',
+                #     'wall_boundary_line',
+                #     'water_boundary_line',
+                #     'snow_boundary_line',
+                #     'manhole_boundary_line',
+                #     'others_boundary_line',
+                # ]
+
+                plt.subplot(3, 3, 6)
+                plt.imshow(gt_line_cls[1])    # index代表不同类别的heatmap
+
+                plt.subplot(3, 3, 7)
+                plt.imshow(gt_confidence_visible[0])
+
+                plt.subplot(3, 3, 8)
+                plt.imshow(gt_confidence_hanging[0])
+
+                plt.subplot(3, 3, 9)
+                plt.imshow(gt_confidence_covered[0])
+
+
                 plt.show()
-                # exit(1)
+                exit(1)
 
         exit(1)
 
 
 if __name__ == '__main__':
     # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn.py"
-    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2.py"
+    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_datasetv2.py"
 
     # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
 
     # 用于加载数据的测试调试,可用于验证数据加载和数据增强的正确性
     # debug的时候发现padding的像素在左边,这是由于padding后的flip造成的
+    # 对第二版的数据集进行验证,包括分段的类别属性、可见性和悬空性等
     print("config_path:", config_path)
     main(config_path)
