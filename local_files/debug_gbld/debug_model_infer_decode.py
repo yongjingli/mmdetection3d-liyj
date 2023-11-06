@@ -257,12 +257,45 @@ def draw_gt_result(meta_info):
     return gt_line_map
 
 
+def heatmap_nms(seg_pred):
+    max_pooling = torch.nn.MaxPool2d((3, 3), stride=(1, 1), padding=[1, 1])
+    max_pooling_col = torch.nn.MaxPool2d((3, 1), stride=(1, 1), padding=[1, 0])
+    max_pooling_row = torch.nn.MaxPool2d((1, 3), stride=(1, 1), padding=[0, 1])
+    max_pooling_dilate = torch.nn.MaxPool2d([3, 3], stride=1, padding=[1, 1])  # 去锯齿
+
+
+    seg_max_pooling_col = max_pooling_col(seg_pred)
+    seg_max_pooling_row = max_pooling_row(seg_pred)
+    seg_max_pooling = max_pooling(seg_pred)
+
+    mask_col = seg_pred == seg_max_pooling_col
+    mask_row = seg_pred == seg_max_pooling_row
+    mask_row_row = seg_pred == seg_max_pooling
+    mask = torch.bitwise_or(mask_col, mask_row)
+    # seg_pred[~mask] = -1e6
+    # seg_pred[~mask_row_row] = -1e6
+    # seg_pred[~mask_col] = -1e6
+    # seg_pred[~mask_row] = -1e6
+    # seg_pred = max_pooling_dilate(seg_pred)
+
+    return seg_pred
+
+
 def debug_model_infer_decode(config_path, checkpoint_path):
     # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train/images"
-    test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images"
+    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images"
     # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/test/images"
-    print(test_root)
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_07_59/images"
+    test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231102_mmdet3d_spline/test/images"
 
+    # lwj-2023-10-25
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_07_59/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_13_56/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_24_14/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_28_36/images"
+
+
+    print(test_root)
     model = init_model(config_path, checkpoint_path, device='cuda:0')
     cfg = model.cfg
 
@@ -280,9 +313,52 @@ def debug_model_infer_decode(config_path, checkpoint_path):
     glass_land_boundary_line_2d_decode_numpy = GlasslandBoundaryLine2DDecodeNumpy(confident_t=0.2)
 
     for img_name in tqdm(img_names, desc="img_names"):
-        # img_name = "1696991348.45783.jpg"
-        # img_name = "1696991333.15902.jpg"
-        img_name = "1696991118.675607.jpg"
+
+        # img_name = "1696990080.166705.jpg"   # 由于聚类的效果出现漏检
+        # img_name = "1696990080.699983.jpg"   # 由于聚类的效果出现漏检
+        # img_name = "1696990082.499848.jpg"   # 由于聚类的效果出现漏检
+        # img_name = "1696990108.297873.jpg"   # 在障碍的周围产生响应,区域生长出现问题
+        # img_name = "1696990114.397417.jpg"   # 由于聚类的效果出现漏检
+        # img_name = "1696990119.297038.jpg"   # 聚类效果还可以,但是由于分割效果不好而变得零散
+        # img_name = "1696990121.196903.jpg"   # 聚类的问题，长的那段与下面那段归为一类，由于长度比较长从而而释放出来
+        # img_name = "1696990179.092455.jpg"   # 距离近而且聚类连在一起,从而导致出现问题
+        # img_name = "1696990188.258413.jpg"   # 分割的问题,但误识别部分的置信度比周围低,通过数据解决
+        # img_name = "1696990195.691176.jpg"     # 分割的问题
+
+        #测试集验证
+        # img_name = "1689848691117702411.jpg"  # 远处距离聚类出错，而且更远的点比较靠近从而出现连接错误
+        # img_name = "1689848788578806401.jpg"  # 聚类的问题
+        # img_name = "1689848819889360075.jpg"  # 采用分类聚类的方式
+        # img_name = "1695031238613012474.jpg"  # Heatmap变粗，垂直的时候区域生长的时候出现点顺序的问题
+        # img_name = "c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_7181.jpg"  # 聚类、分割问题
+        # img_name = "c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_7451.jpg"  # 聚类、分割问题
+        # img_name = "dff47067-ede3-4ac0-b903-ef04df89a291_front_camera_9091.jpg"    # 分割问题
+
+        # 将线段进行细化
+        # img_name = "1695030883240994950.jpg"    # 灌木丛线
+        # img_name = "c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_9201.jpg"   # 灌木丛线
+        # img_name = "1689848713868127775.jpg"
+        # img_name = "1695031405813262853.jpg"
+        img_name = "1695031238613012474.jpg"
+
+        # 细化导致的问题
+        # img_name = "c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_6761.jpg"   # 聚类效果问题
+        # img_name = "c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_8731.jpg"   # 聚类效果问题
+        # img_name = "dff47067-ede3-4ac0-b903-ef04df89a291_front_camera_7091.jpg"     # 聚类效果问题
+
+        # 检查test数据集
+        # img_name = "1689848734654320005.jpg"
+
+        # lwj 验证
+        # img_name = "1696990107.197989.jpg"
+        # img_name = "1696990184.992007.jpg"
+        # img_name = "1696990178.992459.jpg"
+        # img_name = "1696990178.992459.jpg"
+        # img_name = "1696990178.592509.jpg"
+
+        glass_land_boundary_line_2d_decode_numpy.debub_emb = True
+        glass_land_boundary_line_2d_decode_numpy.debug_piece_line = True
+
         count = count + 1
         if count % jump != 0:
             continue
@@ -301,6 +377,11 @@ def debug_model_infer_decode(config_path, checkpoint_path):
         for img_path in img_paths:    # 这里可以是列表,然后推理采用batch的形式
             data_info = {}
             data_info['img_path'] = img_path
+
+            ann_path = img_path.replace("images", "jsons")[:-4] + ".json"
+            if os.path.exists(ann_path):
+                data_info["ann_path"] = ann_path
+
             data_input = test_pipeline(data_info)
             batch_data.append(data_input)
 
@@ -363,11 +444,10 @@ def debug_model_infer_decode(config_path, checkpoint_path):
                                      batch_data_samples=collate_data["data_samples"])
 
                 heatmap_map_seg = heatmap[0][stages].cpu().detach()
-                # heatmap_map_seg = torch.sigmoid(heatmap[0][stages].cpu().detach())
-                # noise_filter = torch.nn.MaxPool2d([3, 1], stride=1, padding=[1, 0])  # 去锯齿
-                # seg_max_pooling = noise_filter(heatmap_map_seg)
-                # mask = heatmap_map_seg == seg_max_pooling
-                # heatmap_map_seg[~mask] = -1e6
+
+                # 进行heatmap的nms操作
+                # heatmap_map_seg = heatmap_nms(heatmap_map_seg)
+
                 heatmap_map_seg = heatmap_map_seg.numpy()[bath_size]
 
                 heatmap_map_offset = heatmap[1][stages].cpu().detach().numpy()[bath_size]
@@ -464,9 +544,16 @@ def debug_model_infer_decode(config_path, checkpoint_path):
             # plt.savefig(s_path, dpi=300)
             # plt.show()
             print(s_path)
+            # cv2.imwrite(s_path, img_show)
             cv2.imwrite(s_path, img_show2)
-            plt.subplot(1, 1, 1)
+            plt.subplot(3, 1, 1)
+            plt.imshow(img_show[:, :, ::-1])
+
+            plt.subplot(3, 1, 2)
             plt.imshow(img_show2[:, :, ::-1])
+
+            plt.subplot(3, 1, 3)
+            plt.imshow(heatmap_map_seg_emb)
             plt.show()
             exit(1)
 
@@ -477,8 +564,29 @@ if __name__ == "__main__":
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/gbld_debug_config_no_dcn_datasetv2.py"
     # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/epoch_250.pth"
 
-    config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/gbld_debug_config_no_dcn_datasetv2.py"
-    checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/epoch_250.pth"
+    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/epoch_250.pth"
+
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/epoch_250.pth"
+
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231024_batch_12_no_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231024_batch_12_no_crop_split_line_10_emb_weight/epoch_200.pth"
+
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_crop/gbld_v0.3_20231024_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_crop/gbld_v0.3_20231024_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 2031026
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231026_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231026_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 20231031
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231031_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231031_batch_12_with_crop_split_line_10_emb_weight/epoch_100.pth"
+
+    # 20231102
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
 
     debug_model_infer_decode(config_path, checkpoint_path)
     print("End")

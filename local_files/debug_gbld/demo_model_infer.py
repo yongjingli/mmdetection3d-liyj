@@ -71,8 +71,49 @@ def main():
     # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/epoch_200.pth"
 
     # 服务器
-    config_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/gbld_debug_config_no_dcn_datasetv2.py"
-    checkpoint_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/epoch_200.pth"
+    # config_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/gbld_debug_config_no_dcn_datasetv2.py"
+    # checkpoint_path = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered8/epoch_200.pth"
+
+    # 20231024
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/epoch_250.pth"
+
+    # 将crop数据增强去除
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231024_no_crop/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231024_no_crop/epoch_100.pth"
+
+    # 将seg-emg weight提升为10,采用split-line的方式
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231024_batch_12_no_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231024_batch_12_no_crop_split_line_10_emb_weight/epoch_200.pth"
+
+
+    # debug crop
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_crop/gbld_v0.3_20231024_batch_12_no_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_crop/gbld_v0.3_20231024_batch_12_no_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 20231026
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231026_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231026_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 20231030
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231030_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231030_batch_12_with_crop_split_line_10_emb_weight/epoch_200.pth"
+
+    # 20231031
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231031_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231031_batch_12_with_crop_split_line_10_emb_weight/epoch_100.pth"
+
+    # 20231031
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231101_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231101_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 20231102
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 服务器
+    # config_path = "/data-ssd2/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/on_server/gbld_v0.3_20231026_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/data-ssd2/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/on_server/gbld_v0.3_20231026_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
 
     model = init_model(config_path, checkpoint_path, device='cuda:0')
     # onnx output
@@ -83,31 +124,33 @@ def main():
     test_pipeline = deepcopy(cfg.val_dataloader.dataset.pipeline)
     test_pipeline = Compose(test_pipeline)
 
-    # test_root = "/home/dell/liyongjing/test_data/rosbag2_2023_07_20-18_24_24_0_image"
-    # test_root = "/media/dell/Egolee1/liyj/data/label_data/label_data/2023_08_31-17_13_04_0_images"
-    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230728_mmdet3d/train/images"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags_parse_data/2023_08_30-11_09_04_0/image"
-    # test_root = "/media/dell/Egolee1/liyj/data/debug_data/debug_construct_maps_20230913/image"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-17_51_57/parse_data/image"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-17_41_56/parse_data/image"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-17_53_31/parse_data/image"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/data_0918/rosbag2_2023_09_18-18_02_54/parse_data/image"
-    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230927_mmdet3d/train/images"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_28_36/parse_data/image"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_24_14/parse_data/image"
-    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train/images"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231015/long_rosbag2_2023_10_10-15_04_43_test_1/parse_data/image"
-    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train/images"
-    # test_root = "/media/dell/Egolee1/liyj/data/ros_bags/20231012/rosbag2_2023_10_11-10_28_36/parse_data/image"
-    # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images"
-
     # 服务器
-    # test_root = "/data-hdd/XW_Data/collect_data/data_0918/rosbag2_2023_09_18-17_41_56/parse_data/image"
-    # save_root = "/media/dell/Egolee1/liyj/data/ros_bags/rosbag2_2023_09_05-15_33_21/parse_data/image_vis"
     # test_root = "/data-hdd/XW_Data/collect_data/20231010/long_rosbag2_2023_10_10-15_04_43_test_1/parse_data/image"
-    test_root = "/data-hdd/XW_Data/collect_data/20231010/short_rosbag2_2023_10_10-15_49_36_test_2/parse_data_liyj/image"
-    print(test_root)
+    # test_root = "/data-hdd/XW_Data/collect_data/20231010/short_rosbag2_2023_10_10-15_49_36_test_2/parse_data_liyj/image"
+    # test_root = "/data-hdd/XW_Data/collect_data/20231026am/big_rosbag2_2023_10_26-11_09_36/images"
+    # test_root = "/data-hdd/XW_Data/collect_data/20231026am/small_rosbag2_2023_10_26-11_24_50/images"
 
+    # lwj-2023-10-25
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_07_59/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_13_56/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_24_14/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_28_36/images"
+    # test_root = "/data-hdd/XW_Data/collect_data/20231026am/big_rosbag2_2023_10_26-11_09_36/images"
+
+    # 对测试集进行验证,这样比较容易发现问题（对验证集进行验证也更加容易发现问题）
+    # test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231025_mmdet3d_spline/test/images"
+
+    # 20231031采集车
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231101/rosbag2_2023_10_31-16_09_00/camera_front_images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231101/rosbag2_2023_10_31-16_09_00/camera_front_left_images"
+
+    # 测试近距离
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231104/rosbag2_camera_2023_11_04-17_06_47/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231104/rosbag2_camera_2023_11_04-17_07_30/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231104/rosbag2_camera_2023_11_04-17_09_30/images"
+    test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231104/rosbag2_camera_2023_11_04-17_15_34/images"
+
+    print(test_root)
     save_root = test_root + "_vis"
     if os.path.exists(save_root):
         shutil.rmtree(save_root)
@@ -202,18 +245,14 @@ def main():
                         point_cls = pre_point[4]
                         color = color_list[int(point_cls)]
 
-                        # if point_visible < 0.3 and point_covered > 0.3:
-                        #     color = (0, 0, 0)
-
-                        if point_visible < 0.2:
-                            color = (0, 0, 0)
-
                         thickness = 3
                         cv2.line(img_origin, (x1, y1), (x2, y2), color, thickness, 8)
                         line_orient = cal_points_orient(pre_point, cur_point)
 
-                        # print(i)
-                        if i % 5 == 0:
+                        if point_visible < 0.2:
+                            cv2.circle(img_origin, (x2, y2), thickness * 2, (0, 0, 0), thickness=2)
+
+                        if i % 50 == 0:
                             orient = pre_point[5]
                             if orient != -1:
                                 reverse = False   # 代表反向是否反了
@@ -245,7 +284,11 @@ def main():
                         pre_point = cur_point
 
                 s_img_path = os.path.join(save_root, img_name)
-                cv2.imwrite(s_img_path, img_origin)
+
+                if img_origin is not None:
+                    img_h, img_w, _ = img_origin.shape
+                    img_origin = cv2.resize(img_origin, (img_w//2, img_h//2))
+                    cv2.imwrite(s_img_path, img_origin)
                 # plt.imshow(img_origin[:, :, ::-1])
                 # plt.show()
                 # exit(1)

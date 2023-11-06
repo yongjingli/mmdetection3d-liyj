@@ -406,14 +406,20 @@ class GbldMetric(BaseMetric):
 
     def get_line_heatmap(self, lines, heatmap_size, thickness=3):
         lines_heatmap = np.zeros(heatmap_size, dtype=np.uint8)
-
+        img_h, img_w = heatmap_size
         for line in lines:
             pre_point = line[0]
             for cur_point in line[1:]:
                 x1, y1 = int(pre_point[0]), int(pre_point[1])
                 x2, y2 = int(cur_point[0]), int(cur_point[1])
 
-                cv2.line(lines_heatmap, (x1, y1), (x2, y2), (1), thickness, 8)
+                draw_thickness = thickness
+                if y1 > img_h//2 and y2 > img_h//2:
+                    # draw_thickness = draw_thickness + 20
+                    draw_thickness = int(draw_thickness * 1.4)
+
+                # cv2.line(lines_heatmap, (x1, y1), (x2, y2), (1), thickness, 8)
+                cv2.line(lines_heatmap, (x1, y1), (x2, y2), (1), draw_thickness, 8)
                 pre_point = cur_point
 
         return lines_heatmap

@@ -301,6 +301,7 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
         piecewise_lines.append(piecewise_line)
         existing_points = alternative_points
+
     if len(piecewise_lines) == 0:
         return []
     elif len(piecewise_lines) == 1:
@@ -358,9 +359,11 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
             pred_visible_map, pred_hanging_map, pred_covered_map
         )
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
-        piecewise_lines.append(piecewise_line)
-        existing_points = alternative_points
+        # piecewise_lines.append(piecewise_line)
+        if len(piecewise_line) > 3:
+            piecewise_lines.append(piecewise_line)
 
+        existing_points = alternative_points
 
     if len(piecewise_lines) == 0:
         return []
@@ -370,6 +373,7 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
     else:
 
         # exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=40)[0]
+        # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
         all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
 
     for all_exact_line in all_exact_lines:
@@ -381,6 +385,131 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
     return all_exact_lines
 
 
+def split_line_points_by_cls(raw_lines, pred_cls_map):
+    pred_cls_map = np.argmax(pred_cls_map, axis=0)
+    raw_lines_cls = []
+    for raw_line in raw_lines:
+        raw_line = np.array(raw_line)
+        xs, ys = raw_line[:, 0], raw_line[:, 1]
+        clses = pred_cls_map[ys, xs]
+        cls_ids = np.unique(clses)
+        for cls_id in cls_ids:
+            cls_mask = clses == cls_id
+            raw_line_cls = raw_line[cls_mask]
+            raw_lines_cls.append(raw_line_cls.tolist())
+    return raw_lines_cls
+
+
+def get_line_key_point(line, order, fixed):
+    index = []
+    if order == 0:
+        for point in line:
+            if int(point[0]) == int(fixed):
+                index.append(int(point[1]))
+    else:
+        for point in line:
+            if int(point[1]) == int(fixed):
+                index.append(int(point[0]))
+
+    index = np.sort(index)
+
+    start = False
+    last_ind = -1
+    start_ind = -1
+    keypoint = []
+    if len(index) == 1:
+        if order == 0:
+            keypoint.append([fixed, index[0]])
+        else:
+            keypoint.append([index[0], fixed])
+
+    elif len(index) > 1:
+        for i in range(len(index)):
+            if start == False:
+                start = True
+                start_ind = index[i]
+            if i == 0:
+                start = True
+                last_ind = index[i]
+                start_ind = index[i]
+                continue
+            # if abs(index[i] - last_ind) > 1 or i == len(index) - 1:
+            #     end_ind = last_ind
+            #     start = False
+            #     if order == 0:
+            #         keypoint.append([fixed, int((start_ind + end_ind) / 2)])
+            #     else:
+            #         keypoint.append([int((start_ind + end_ind) / 2), fixed])
+            #     start_ind = index[i]
+
+            if abs(index[i] - last_ind) > 1:
+                end_ind = last_ind
+                start = False
+                if order == 0:
+                    keypoint.append([fixed, int((start_ind + end_ind) / 2)])
+                else:
+                    keypoint.append([int((start_ind + end_ind) / 2), fixed])
+                start_ind = index[i]
+
+                if i == len(index) - 1:
+                    if order == 0:
+                        keypoint.append([fixed, int(index[i])])
+                    else:
+                        keypoint.append([int(index[i]), fixed])
+
+            elif i == len(index) - 1:
+                end_ind = index[i]
+                start = False
+                if order == 0:
+                    keypoint.append([fixed, int((start_ind + end_ind) / 2)])
+                else:
+                    keypoint.append([int((start_ind + end_ind) / 2), fixed])
+                start_ind = index[i]
+
+            last_ind = index[i]
+
+    return keypoint
+
+
+def get_slim_points(line, start_x, end_x, start_y, end_y, step, order):
+    slim_points = []
+    for x_index in range(start_x, end_x+1, step):
+        keypoint = get_line_key_point(line, order, x_index)
+        slim_points.extend(keypoint)
+    return slim_points
+
+
+def get_slim_lines(lines):
+    slim_lines = []
+    for line in lines:
+        line = np.array(line)
+        xs, ys = line[:, 0], line[:, 1],
+        xmin, xmax = min(xs), max(xs)
+        ymin, ymax = min(ys), max(ys)
+
+        pixel_step = 1
+        x_len = xmax - xmin
+        y_len = ymax - ymin
+        ratio_len = max(x_len, y_len) / (min(x_len, y_len) + 1e-8)
+        if ratio_len > 2:
+            if x_len > y_len:
+                order = 0
+                slim_points = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
+            else:
+                order = 1
+                slim_points = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
+        else:
+            order = 0
+            slim_points_x = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
+            order = 1
+            slim_points_y = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
+            slim_points = slim_points_x + slim_points_y
+
+        # if len(slim_points) > 1:
+        slim_lines.append(slim_points)
+    return slim_lines
+
+
 def connect_line_points(mask_map, embedding_map, x_map, y_map,
                         confidence_map, pred_emb_id, pred_cls_map,
                         pred_orient_map=None, pred_visible_map=None,
@@ -390,6 +519,12 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
     ys, xs = np.flipud(ys), np.flipud(xs)   # 优先将y大的点排在前面
     ebs = embedding_map[ys, xs]
     raw_lines = cluster_line_points(xs, ys, ebs)
+
+    # 聚类出来的lines是没有顺序的点击, 根据类别将点集划分为更细的点击
+    raw_lines = split_line_points_by_cls(raw_lines, pred_cls_map)
+
+    # 将线进行细化
+    raw_lines = get_slim_lines(raw_lines)
 
     raw_lines = remove_short_lines(raw_lines)
     raw_lines = remove_far_lines(raw_lines)
@@ -410,7 +545,6 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
                                             pred_cls_map, pred_orient_map,
                                             pred_visible_map, pred_hanging_map, pred_covered_map
                                             )
-
         if len(all_lines) > 0:
             single_line = all_lines[0]
             if len(single_line) > 0:
@@ -418,7 +552,7 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
 
             if len(all_lines) > 1:
                 for single_line in all_lines[1:]:
-                    if len(single_line) > 50:
+                    if len(single_line) > 45:
                         exact_lines.append(single_line)
 
     if len(exact_lines) == 0:
@@ -446,7 +580,9 @@ class GlasslandBoundaryLine2DDecode(BaseModule):
         self.grid_size = grid_size
         self.line_map_range = [0, -1]    # 不进行过滤
 
-        self.noise_filter = nn.MaxPool2d([3, 1], stride=1, padding=[1, 0])  # 去锯齿
+        self.max_pooling_col = nn.MaxPool2d((3, 1), stride=(1, 1), padding=[1, 0])
+        self.max_pooling_row = nn.MaxPool2d((1, 3), stride=(1, 1), padding=[0, 1])
+        self.max_pooling_dilate = nn.MaxPool2d([3, 3], stride=1, padding=[1, 1])  # 去锯齿
 
     def get_line_cls(self, exact_curse_lines_multi_cls):
         output_curse_lines_multi_cls = []
@@ -543,19 +679,31 @@ class GlasslandBoundaryLine2DDecode(BaseModule):
             output_curse_lines_with_orient.append(lines)
         return output_curse_lines_with_orient
 
+    def heatmap_nms(self, seg_pred):
+        seg_max_pooling_col = self.max_pooling_col(seg_pred)
+        seg_max_pooling_row = self.max_pooling_row(seg_pred)
+
+        mask_col = seg_pred == seg_max_pooling_col
+        mask_row = seg_pred == seg_max_pooling_row
+        mask = torch.bitwise_or(mask_col, mask_row)
+        seg_pred[~mask] = -1e6
+        # seg_pred[~mask_col] = -1e6
+        # seg_pred[~mask_row] = -1e6
+        # seg_pred = self.max_pooling_dilate(seg_pred)
+
+        return seg_pred
+
     def forward(self, seg_pred, offset_pred, seg_emb_pred, connect_emb_pred, cls_pred, orient_pred=None,
                 visible_pred=None, hanging_pred=None, covered_pred=None,):
         # 对pred_confidene 进行max-pooling
-        # 应该是decode加上offset后,在进行h方向的max-pooling
-        # seg_max_pooling = self.noise_filter(seg_pred)
-        # mask = seg_pred == seg_max_pooling
-        # seg_pred[~mask] = -1e6
+        # seg_pred = self.heatmap_nms(seg_pred)
 
         seg_pred = seg_pred.cpu().detach().numpy()
         offset_pred = offset_pred.cpu().detach().numpy()
         seg_emb_pred = seg_emb_pred.cpu().detach().numpy()
         connect_emb_pred = connect_emb_pred.cpu().detach().numpy()
         cls_pred = cls_pred.cpu().detach().numpy()
+
 
         if orient_pred is not None:
             orient_pred = orient_pred.cpu().detach().numpy()
@@ -601,7 +749,8 @@ class GlasslandBoundaryLine2DDecode(BaseModule):
                 points = np.array(exact_curse_line)
                 poitns_cls = points[:, 4]
 
-                if len(poitns_cls) > 5:
+                # 大于10个点的才会输出
+                if len(poitns_cls) > 10:
                     # 进行平滑处理
                     line_x = exact_curse_line[:, 0]
                     line_y = exact_curse_line[:, 1]
@@ -616,7 +765,7 @@ class GlasslandBoundaryLine2DDecode(BaseModule):
                     exact_curse_line[:, 0][mask] = line_x[mask]
                     exact_curse_line[:, 1][mask] = line_y[mask]
 
-                    if len(exact_curse_line) > 0:
+                    if len(exact_curse_line) > 1:
                         lines.append(exact_curse_line)
 
             output_curse_lines_multi_cls.append(lines)
@@ -683,6 +832,11 @@ class GlasslandBoundaryLine2DDecode(BaseModule):
 
         mask = np.zeros_like(pred_confidence, dtype=np.bool)
         mask[:, min_y:max_y, :] = pred_confidence[:, min_y:max_y, :] > self.confident_t
+
+        # import matplotlib.pyplot as plt
+        # plt.imshow(mask[0])
+        # plt.show()
+        # exit(1)
 
         exact_lines = []
         count = 0

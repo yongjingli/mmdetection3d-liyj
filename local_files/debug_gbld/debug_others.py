@@ -8,8 +8,11 @@ import numpy as np
 import cv2
 import json
 import shutil
+from tabulate import tabulate
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import numpy as np
+
 
 classes = [
             'road_boundary_line',
@@ -24,6 +27,21 @@ classes = [
         ]
 palette = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (10, 215, 255), (0, 255, 255),
             (230, 216, 173), (128, 0, 128), (203, 192, 255), (238, 130, 238)]
+
+TYPE_DICT = {
+    "路面边界线": "road_boundary_line",
+    "灌木丛边界线": "bushes_boundary_line",
+    "围栏边界线": "fence_boundary_line",
+    "石头边界线": "stone_boundary_line",
+    "墙体边界线": "wall_boundary_line",
+    "水面边界线": "water_boundary_line",
+    "雪地边界线": "snow_boundary_line",
+    "井盖边界线": "manhole_boundary_line",
+    # "悬空物体边界线": "hanging_object_boundary_line",
+    "其他线": "others_boundary_line"
+}
+
+TYPE_DICT_INV = {value: key for key, value in TYPE_DICT.items()}
 
 
 def debug_write_data_infos():
@@ -262,6 +280,147 @@ def debug_signal_filter():
 
     print(filtered_signal)
 
+
+def format_kpi_output():
+    def get_row_text(row_list):
+        text = ""
+        for row_t in row_list:
+            text = text + row_t
+        return text
+
+    def split_list(lst, chunk_size):
+        return [lst[i:i + chunk_size] for i in range(0, len(lst), chunk_size)]
+
+    # kpi_dict = {'all': [0.75, 0.77, 0.7593688362919133], 'road_boundary_line': [0.83, 0.84, 0.8344703770197487], 'bushes_boundary_line': [0.66, 0.72, 0.6881969587255613], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.8, 0.63, 0.7044025157232704], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.5, 0.51, 0.5044510385756678], 'others_boundary_line': [-1, 0.0, -1]}
+    # kpi_dict = {'all': [0.88, 0.87, 0.8744717304397487], 'road_boundary_line': [0.88, 0.89, 0.884472049689441], 'bushes_boundary_line': [0.8, 0.81, 0.8044692737430169], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.89, 0.71, 0.7893816364772018], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.71, 0.54, 0.6129496402877699], 'others_boundary_line': [-1, 0.0, -1]}
+    kpi_dict = {'all': [0.9, 0.77, 0.8294434470377021], 'road_boundary_line': [0.94, 0.83, 0.8810841332580462], 'bushes_boundary_line': [0.85, 0.72, 0.779121578612349], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.94, 0.49, 0.6437456324248777], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.81, 0.4, 0.5350949628406277], 'others_boundary_line': [-1, 0.0, -1]}
+    grid_n = 20       # 控制格子的长度
+    row_max_num = 5  # 控制一行里格子的最大数量
+
+    names = list(kpi_dict.keys())
+    split_names = split_list(names, row_max_num)
+    for names in split_names:
+        headers = ["|", "Statics/Category".center(grid_n)]
+        row_0 = ["|", "Acc".center(grid_n)]
+        row_1 = ["|", "Recall".center(grid_n)]
+        row_2 = ["|", "F".center(grid_n)]
+
+        for name in names:
+            show_name = name.replace("_line", "")
+
+            kpi = kpi_dict[name]
+            acc, recall, F = kpi
+
+            show_name = show_name.center(grid_n)
+            acc = str(round(acc, 2)).center(grid_n)
+            recall = str(round(recall, 2)).center(grid_n)
+            F = str(round(F, 2)).center(grid_n)
+
+            headers.append("|" + show_name)
+            row_0.append("|" + acc)
+            row_1.append("|" + recall)
+            row_2.append("|" + F)
+
+            # 最后格子的右边也加入"|"
+            if name == names[-1]:
+                headers.append("|")
+                row_0.append("|")
+                row_1.append("|")
+                row_2.append("|")
+
+        text_head = get_row_text(headers)
+        text_row_0 = get_row_text(row_0)
+        text_row_1 = get_row_text(row_1)
+        text_row_2 = get_row_text(row_2)
+        line_str = "- " * (len(text_head)//2)
+
+        print(line_str)
+        print(text_head)
+        print(line_str)
+        print(text_row_0)
+        print(text_row_1)
+        print(text_row_2)
+
+    line_str = "_ " * (len(text_head) // 2)
+    print(line_str)
+
+def get_line_splits():
+    # line_types = ["1", "1", "1", "2", "2", "3", "3"]
+    line_types = ["1", "1", "1", "1", "1", "1", "1"]
+    line_points = list(range(len(line_types)))
+    pre_index = 0
+    # pre_type = line_types[0]
+    line_indexs = []  # [(0, 3), (3, 5), (5,7)]
+    for cur_index in range(1, len(line_types)):
+        if line_types[cur_index] != line_types[pre_index]:
+            line_indexs.append((pre_index, cur_index))
+            pre_index = cur_index
+
+        if cur_index == len(line_types) - 1:
+            line_indexs.append((pre_index, cur_index))
+            pre_index = cur_index
+
+    print(line_indexs)
+    for line_index in line_indexs:
+        id_0, id_1 = line_index
+        line_type = line_types[id_0:id_1]
+
+        # 对于属性是添加当前点的属性
+        line_type = line_type + [line_types[id_1-1]]
+
+        # 对于点坐标是添加下个点的位置
+        line_point = line_points[id_0:id_1]
+        line_point = line_point + [line_points[id_1]]
+        print(line_type)
+        print(line_point)
+
+
+def debug_line_dist():
+    img = np.ones((1860, 2880, 3), dtype=np.uint8) * 255
+    thickness = 60
+    line_point_0 = (0, 1860//2)
+    line_point_1 = (2880, 1860//2)
+    cv2.line(img, line_point_0, line_point_1, color=(0, 0, 0), thickness=1)
+    cv2.line(img, line_point_0, line_point_1, color=(0, 0, 0), thickness=thickness)
+
+    line_point_0 = (0, 1860//2 + 60)
+    line_point_1 = (2880, 1860//2 + 60)
+    cv2.line(img, line_point_0, line_point_1, color=(0, 0, 0), thickness=1)
+    cv2.line(img, line_point_0, line_point_1, color=(0, 0, 0), thickness=thickness)
+
+    plt.imshow(img)
+    plt.show()
+
+
+def show_line_heatmap():
+    # line_heat_map_path = "/home/liyongjing/Downloads/20231027/1695030883240994950_img_heatmamp_line.npy"
+    # line_heat_map_path = "/home/liyongjing/Downloads/20231027/1695031238613012474_img_heatmamp_line.npy"
+    line_heat_map_path = "/home/liyongjing/Downloads/20231027/1695031405813262853_img_heatmamp_line.npy"
+    # line_heat_map_path = "/home/liyongjing/Downloads/20231027/c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_9201_img_heatmamp_line.npy"
+    line_heat_map = np.load(line_heat_map_path)
+    plt.subplot(2, 1, 1)
+    plt.imshow(line_heat_map )
+    plt.subplot(2, 1, 2)
+    plt.imshow(line_heat_map > 0.2)
+    plt.show()
+
+
+def show_img():
+    import matplotlib
+    # matplotlib.use('Qt5Agg')
+    # plt.switch_backend('agg')
+    # plt.switch_backend('TkAgg')
+    print(matplotlib.pyplot.get_backend())
+    img = np.ones((100, 100))
+    print(__file__)
+    # 172.18.60.136:10.0
+    print(os.chdir(os.path.split(__file__)[0]))
+    print(os.environ['DISPLAY'])
+
+    plt.imshow(img)
+    plt.show()
+
+
 if __name__ == "__main__":
     print("Start")
     # test_mmdet_fpn()
@@ -273,6 +432,19 @@ if __name__ == "__main__":
     # 调试标注系统解析的json文件
     # debug_parse_label_json()
 
-    # 数据集里解析的json文件
-    debug_signal_filter()
+    # 对一维信号进行平滑处理
+    #debug_signal_filter()
+
+    # 对kpi的输出进行格式的转换
+    # format_kpi_output()
+
+    # 根据类别将线段分段
+    # get_line_splits()
+
+    # debug_line_dist()
+
+    # show_line_heatmap()
+
+    show_img()
+
     print("End")

@@ -57,6 +57,69 @@ def draw_curce_line_on_img(img, points, cls_name, color=(0, 255, 0)):
     return img
 
 
+def get_split_lines_by_visible(labels):
+    new_labels = []
+    for i, label in enumerate(labels):
+        # if i != 3:
+        #     continue
+
+        intersect_index = np.array(label["intersect_index"])
+        points = np.array(label["points"])
+        attr_type = np.array(label["type"]).reshape(-1, 1)
+        attr_visible = np.array(label["visible"]).reshape(-1, 1)
+        attr_hanging = np.array(label["hanging"]).reshape(-1, 1)
+        attr_covered = np.array(label["covered_by_grass"]).reshape(-1, 1)
+
+        # 不可见同时被草遮挡的需要进行分段
+        split_line_mask = ~np.bitwise_and(attr_visible != "true", attr_covered != "true")
+        pre_index = 0
+        line_indexs = []  # [(0, 3), (3, 5), (5,7)]
+        for cur_index in range(1, len(split_line_mask)):
+            if split_line_mask[cur_index] != split_line_mask[pre_index]:
+                line_indexs.append((pre_index, cur_index))
+                pre_index = cur_index
+
+            if cur_index == len(split_line_mask) - 1:
+                line_indexs.append((pre_index, cur_index))
+                pre_index = cur_index
+
+        for line_index in line_indexs:
+            id_0, id_1 = line_index
+            # 对于点坐标是添加下个点的位置
+            split_line_point = np.concatenate([points[id_0:id_1], points[id_1:id_1 + 1]], axis=0)
+
+            # 对于属性是添加当前点的属性
+            split_line_type = np.concatenate([attr_type[id_0:id_1], attr_type[id_1 - 1:id_1]], axis=0)
+            split_line_visible = np.concatenate([attr_visible[id_0:id_1], attr_visible[id_1 - 1:id_1]], axis=0)
+            split_line_hanging = np.concatenate([attr_hanging[id_0:id_1], attr_hanging[id_1 - 1:id_1]], axis=0)
+            split_line_covered = np.concatenate([attr_covered[id_0:id_1], attr_covered[id_1 - 1:id_1]], axis=0)
+
+            attr_type_list = split_line_type.reshape(-1).tolist()
+            poly_line_name = max(attr_type_list, key=attr_type_list.count)
+
+            # 判断是否为分段的属性
+            s_mask = np.concatenate([split_line_mask[id_0:id_1], split_line_mask[id_1 - 1:id_1]], axis=0)
+            b_s_mask = np.any(s_mask)
+
+            # 不可见且不是被草遮挡的部分将被过滤
+            # 或者将其中的类别修改为others
+            if not b_s_mask:
+                split_line_type = np.array(len(split_line_type) * ["others_boundary_line"]).reshape(-1, 1)
+                # print(split_line_type[0])
+                # exit(1)
+
+            new_label = {"points": split_line_point.tolist(),
+                         "intersect_index": intersect_index,  # 线的类别
+                         "type": split_line_type.tolist(),  # 点的类别
+                         "visible": split_line_visible.tolist(),  # 点的可见性
+                         "hanging": split_line_hanging.tolist(),  # 点的悬空属性
+                         "covered_by_grass": split_line_covered.tolist(),  # 点的是否被草挡住的属性
+                         }
+
+            new_labels.append(new_label)
+    return new_labels
+
+
 def parse_v02_data_2_lld_data(base_infos):
     # cvat_xml_path = "/media/dell/Elements SE/liyj/data/collect_data_20230720/rosbag2_2023_07_20-18_24_24/glass_edge_overfit_20230721/annotations.xml"
     # cvat_xml_path = base_infos["cvat_xml_path"]
@@ -67,7 +130,8 @@ def parse_v02_data_2_lld_data(base_infos):
     dst_h = base_infos["dst_h"]
     max_num = base_infos["max_num"]
     dense_points = base_infos["dense_points"]
-    split_lines = base_infos["split_lines"]
+    split_lines_by_cls = base_infos["split_lines_by_cls"]
+    split_lines_by_visible = base_infos["split_lines_by_visible"]
     test_info_path = base_infos["test_info_path"]
     if test_info_path is not None:
         test_names = get_test_names(test_info_path)
@@ -137,6 +201,10 @@ def parse_v02_data_2_lld_data(base_infos):
         # poly_lines_visible = []     # 点的可见性
         # poly_lines_hanging = []     # 点的悬空属性
         # poly_lines_covered = []     # 点的是否被草挡住的属性
+
+        if split_lines_by_visible:
+            labels['data'] = get_split_lines_by_visible(labels['data'])
+
         for label in labels['data']:
             intersect_index = np.array(label["intersect_index"])
             points = np.array(label["points"])
@@ -145,7 +213,7 @@ def parse_v02_data_2_lld_data(base_infos):
             attr_hanging = np.array(label["hanging"]).reshape(-1, 1)
             attr_covered = np.array(label["covered_by_grass"]).reshape(-1, 1)
 
-            if split_lines:
+            if split_lines_by_cls:
                 # 根据类别将线段分段
                 line_split = attr_type.reshape(-1)
                 pre_index = 0
@@ -411,6 +479,7 @@ def debug_parse_dataset_json(generate_dataset_infos):
     for img_name in tqdm(img_names, desc="img_names"):
         # img_name = "1696991193.66982.jpg"
         # img_name = "1689848745238965269.jpg"
+        # img_name = "1695030147300217849.jpg"
         print("img_name:", img_name)
         img_path = os.path.join(img_root, img_name)
         json_path = os.path.join(label_root, img_name[:-4] + ".json")
@@ -491,7 +560,7 @@ def debug_parse_dataset_json(generate_dataset_infos):
 
                 # img_line
                 # color = (255, 0, 0)
-                color = color_list[line_count]
+                color = color_list[line_count % len(color_list)]
                 x1, y1 = int(pre_point[0]), int(pre_point[1])
                 x2, y2 = int(cur_point[0]), int(cur_point[1])
 
@@ -595,7 +664,8 @@ if __name__ == "__main__":
             },
 
         "dense_points": True,
-        "split_lines": True,    # 是否需要根据类别属性等将线段分段
+        "split_lines_by_cls": True,    # 是否需要根据类别属性等将线段分段
+        "split_lines_by_visible": False,    # 是否需要根据可见属性等将线段分段, 不可见同时不是被草遮挡
 
         # "src_root": "/media/dell/Egolee1/liyj/data/ros_bags/collect_data_20230720/rosbag2_2023_07_20-18_24_24/glass_edge_overfit_20230721",
         # "dst_root": "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230926_mmdet3d",
@@ -617,10 +687,18 @@ if __name__ == "__main__":
         # "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231101_mmdet3d_spline",
 
         #  20231023
+        # "src_root": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2",
+        # #  如果是None则随机产生测试集,如果提供则采用提供的信息作为测试集
+        # "test_info_path": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231020_v0.2/gbld_infos_test_20231024.pkl",
+        # "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231102_mmdet3d_spline",
+
+        # debug
+        #  20231023
+        # "src_root": "/home/liyongjing/Egolee/hdd-data/data/label_datas/debug_unvisiable_data",
         "src_root": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2",
         #  如果是None则随机产生测试集,如果提供则采用提供的信息作为测试集
         "test_info_path": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231020_v0.2/gbld_infos_test_20231024.pkl",
-        "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231102_mmdet3d_spline",
+        "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231102_mmdet3d_spline_by_cls_by_visible",
 
     }
 

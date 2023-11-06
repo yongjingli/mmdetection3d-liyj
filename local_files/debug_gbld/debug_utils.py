@@ -491,7 +491,7 @@ def parse_ann_info(info: dict) -> dict:
     return ann_info
 
 
-def parse_ann_infov2(info: dict) -> dict:
+def parse_ann_infov2(info: dict, classes=None) -> dict:
     metainfo = {}
     metainfo["classes"] = [
             'road_boundary_line',
@@ -504,6 +504,10 @@ def parse_ann_infov2(info: dict) -> dict:
             'manhole_boundary_line',
             'others_boundary_line',
         ]
+
+    if classes is not None:
+        metainfo["classes"] = classes
+
     ann_path = info["ann_path"]
     with open(ann_path, 'r') as f:
         anns = json.load(f)

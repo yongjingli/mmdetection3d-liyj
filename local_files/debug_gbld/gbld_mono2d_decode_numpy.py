@@ -398,9 +398,22 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
 
 def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map,
                           pred_orient_map=None, pred_visible_map=None, pred_hanging_map=None,
-                          pred_covered_map=None):
+                          pred_covered_map=None, debug_piece_line=False):
 
     existing_points = single_line.copy()
+
+    # debug existing_points
+    if 1:
+        img_h, img_w = x_map.shape
+        img_existing_points = np.zeros((img_h, img_w), dtype=np.uint8)
+        for existing_point in existing_points:
+            x, y = int(existing_point[0]), int(existing_point[1])
+            img_existing_points[y, x] = 1
+
+        plt.imshow(img_existing_points)
+        plt.title("img_existing_points")
+        plt.show()
+
     piecewise_lines = []
     while len(existing_points) > 0:
         existing_points = remove_isolated_points(existing_points)
@@ -441,35 +454,47 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
             pred_visible_map, pred_hanging_map, pred_covered_map
         )
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
-        piecewise_lines.append(piecewise_line)
+
+        # piecewise_lines.append(piecewise_line)
+        # 将点太少的线去除 modify-liyj 2023-11-2
+        if len(piecewise_line) > 3:
+            piecewise_lines.append(piecewise_line)
+
         existing_points = alternative_points
-    #
-    # grid_size = 4
-    # img_h, img_w = x_map.shape
-    # img_piecewise_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
-    # for i, raw_line in enumerate(piecewise_lines):
-    #     color = color_list[i]
-    #     pre_point = raw_line[0]
-    #
-    #     for cur_point in raw_line[1:]:
-    #         # x, y = cur_point[:2]
-    #         # img_piecewise_lines[y, x] = color
-    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
-    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
-    #
-    #         cv2.line(img_piecewise_lines, (x1, y1), (x2, y2), color, 1, 8)
-    #         pre_point = cur_point
-    #
-    #     start_point = raw_line[0]
-    #     end_point = raw_line[-1]
-    #     cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
-    #     cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
-    #
-    # plt.subplot(2, 1, 1)
-    # plt.imshow(confidence_map)
-    # plt.subplot(2, 1, 2)
-    # plt.imshow(img_piecewise_lines)
-    # plt.show()
+
+    # 查看每条线中线段分段情况
+    if debug_piece_line:
+        grid_size = 4
+        img_h, img_w = x_map.shape
+        img_piecewise_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+        for i, raw_line in enumerate(piecewise_lines):
+            if i > len(color_list)-1:
+                color = [np.random.randint(0, 255) for i in range(3)]
+            else:
+                color = color_list[i]
+
+            pre_point = raw_line[0]
+
+            for cur_point in raw_line[1:]:
+                # x, y = cur_point[:2]
+                # img_piecewise_lines[y, x] = color
+                x1, y1 = int(pre_point[0]), int(pre_point[1])
+                x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                cv2.line(img_piecewise_lines, (x1, y1), (x2, y2), color, 1, 8)
+                pre_point = cur_point
+
+            start_point = raw_line[0]
+            end_point = raw_line[-1]
+            cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
+            cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
+
+        plt.subplot(2, 1, 1)
+        plt.imshow(confidence_map)
+        plt.subplot(2, 1, 2)
+        plt.imshow(img_piecewise_lines)
+        plt.title("debug_piece_line")
+        plt.show()
     # exit(1)
 
     if len(piecewise_lines) == 0:
@@ -480,35 +505,39 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
     else:
 
         # exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=40)[0]
+        # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=30)
         all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
-    #
-    # grid_size = 4
-    # img_h, img_w = x_map.shape
-    # img_exact_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
-    # # for i, raw_line in enumerate([exact_lines]):
-    # for i, raw_line in enumerate(all_exact_lines):
-    #     color = color_list[i]
-    #     pre_point = raw_line[0]
-    #
-    #     for cur_point in raw_line[1:]:
-    #         # x, y = cur_point[:2]
-    #         # img_piecewise_lines[y, x] = color
-    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
-    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
-    #
-    #         cv2.line(img_exact_lines, (x1, y1), (x2, y2), color, 1, 8)
-    #         pre_point = cur_point
-    #     start_point = raw_line[0]
-    #     end_point = raw_line[-1]
-    #     cv2.circle(img_exact_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
-    #     cv2.circle(img_exact_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
-    #
-    # plt.subplot(2, 1, 1)
-    # plt.imshow(confidence_map)
-    # plt.subplot(2, 1, 2)
-    # plt.imshow(img_exact_lines)
-    # plt.show()
-    # exit(1)
+
+    if 1:
+        grid_size = 4
+        img_h, img_w = x_map.shape
+        img_exact_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+        # for i, raw_line in enumerate([exact_lines]):
+        for i, raw_line in enumerate(all_exact_lines):
+            color = color_list[i]
+            pre_point = raw_line[0]
+
+            for cur_point in raw_line[1:]:
+                # x, y = cur_point[:2]
+                # img_piecewise_lines[y, x] = color
+                x1, y1 = int(pre_point[0]), int(pre_point[1])
+                x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                cv2.line(img_exact_lines, (x1, y1), (x2, y2), color, 1, 8)
+                pre_point = cur_point
+            start_point = raw_line[0]
+            end_point = raw_line[-1]
+            cv2.circle(img_exact_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
+            cv2.circle(img_exact_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
+
+        plt.subplot(2, 1, 1)
+        plt.imshow(confidence_map)
+        plt.subplot(2, 1, 2)
+        plt.imshow(img_exact_lines)
+        plt.title("debug_exact_line")
+        plt.show()
+        # exit(1)
+
     for all_exact_line in all_exact_lines:
         if all_exact_line[0][1] < all_exact_line[-1][1]:
             all_exact_line.reverse()
@@ -518,36 +547,209 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
     return all_exact_lines
 
 
+def split_line_points_by_cls(raw_lines, pred_cls_map):
+    pred_cls_map = np.argmax(pred_cls_map, axis=0)
+    raw_lines_cls = []
+    for raw_line in raw_lines:
+        raw_line = np.array(raw_line)
+        xs, ys = raw_line[:, 0], raw_line[:, 1]
+        clses = pred_cls_map[ys, xs]
+        cls_ids = np.unique(clses)
+        for cls_id in cls_ids:
+            cls_mask = clses == cls_id
+            raw_line_cls = raw_line[cls_mask]
+            raw_lines_cls.append(raw_line_cls.tolist())
+    return raw_lines_cls
+
+
+def get_line_key_point(line, order, fixed):
+    index = []
+    if order == 0:
+        for point in line:
+            if int(point[0]) == int(fixed):
+                index.append(int(point[1]))
+    else:
+        for point in line:
+            if int(point[1]) == int(fixed):
+                index.append(int(point[0]))
+
+    index = np.sort(index)
+
+    start = False
+    last_ind = -1
+    start_ind = -1
+    keypoint = []
+    if len(index) == 1:
+        if order == 0:
+            keypoint.append([fixed, index[0]])
+        else:
+            keypoint.append([index[0], fixed])
+
+    elif len(index) > 1:
+        for i in range(len(index)):
+            if start == False:
+                start = True
+                start_ind = index[i]
+            if i == 0:
+                start = True
+                last_ind = index[i]
+                start_ind = index[i]
+                continue
+            # if abs(index[i] - last_ind) > 1 or i == len(index) - 1:
+            #     end_ind = last_ind
+            #     start = False
+            #     if order == 0:
+            #         keypoint.append([fixed, int((start_ind + end_ind) / 2)])
+            #     else:
+            #         keypoint.append([int((start_ind + end_ind) / 2), fixed])
+            #     start_ind = index[i]
+
+            if abs(index[i] - last_ind) > 1:
+                end_ind = last_ind
+                start = False
+                if order == 0:
+                    keypoint.append([fixed, int((start_ind + end_ind) / 2)])
+                else:
+                    keypoint.append([int((start_ind + end_ind) / 2), fixed])
+                start_ind = index[i]
+
+                if i == len(index) - 1:
+                    if order == 0:
+                        keypoint.append([fixed, int(index[i])])
+                    else:
+                        keypoint.append([int(index[i]), fixed])
+
+            elif i == len(index) - 1:
+                end_ind = index[i]
+                start = False
+                if order == 0:
+                    keypoint.append([fixed, int((start_ind + end_ind) / 2)])
+                else:
+                    keypoint.append([int((start_ind + end_ind) / 2), fixed])
+                start_ind = index[i]
+
+            last_ind = index[i]
+
+    return keypoint
+
+
+def get_slim_points(line, start_x, end_x, start_y, end_y, step, order):
+    slim_points = []
+    for x_index in range(start_x, end_x+1, step):
+        keypoint = get_line_key_point(line, order, x_index)
+        slim_points.extend(keypoint)
+    return slim_points
+
+
+def get_slim_lines(lines):
+    slim_lines = []
+    for line in lines:
+        line = np.array(line)
+        xs, ys = line[:, 0], line[:, 1],
+        xmin, xmax = min(xs), max(xs)
+        ymin, ymax = min(ys), max(ys)
+
+        pixel_step = 1
+        x_len = xmax - xmin
+        y_len = ymax - ymin
+        ratio_len = max(x_len, y_len) / (min(x_len, y_len) + 1e-8)
+        if ratio_len > 2:
+            if x_len > y_len:
+                order = 0
+                slim_points = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
+            else:
+                order = 1
+                slim_points = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
+        else:
+            order = 0
+            slim_points_x = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
+            order = 1
+            slim_points_y = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
+            slim_points = slim_points_x + slim_points_y
+
+        # 对y进行倒序排序
+        # slim_points = np.array(slim_points)
+        # xs, ys = slim_points[:, 0], slim_points[:, 1]
+        # sorted_indices = np.argsort(ys)[::-1]
+        # slim_points = slim_points[sorted_indices].tolist()
+
+        # if len(slim_points) > 1:
+        slim_lines.append(slim_points)
+    return slim_lines
+
+
 def connect_line_points(mask_map, embedding_map, x_map, y_map,
                         confidence_map, pred_emb_id, pred_cls_map,
                         pred_orient_map=None, pred_visible_map=None,
-                        pred_hanging_map=None, pred_covered_map=None, line_maximum=10):
+                        pred_hanging_map=None, pred_covered_map=None, line_maximum=10,
+                        debub_emb=False, debug_piece_line=False,):
 
     ys, xs = np.nonzero(mask_map)
     ys, xs = np.flipud(ys), np.flipud(xs)   # 优先将y大的点排在前面
     ebs = embedding_map[ys, xs]
     raw_lines = cluster_line_points(xs, ys, ebs)
+    # 聚类出来的lines是没有顺序的点击, 根据类别将点集划分为更细的点击
+    raw_lines = split_line_points_by_cls(raw_lines, pred_cls_map)
 
-    # 查看聚类的效果
-    # img_h, img_w = x_map.shape
-    # img_emb = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
-    # for i, raw_line in enumerate(raw_lines):
-    #     color = color_list[i]
-    #     for point in raw_line:
-    #         x, y = point
-    #         # img_emb[y, x] = (i + 1) * 100
-    #         img_emb[y, x] = color
-    #
-    # plt.subplot(2, 1, 1)
-    # plt.imshow(mask_map)
-    # plt.subplot(2, 1, 2)
-    # plt.imshow(img_emb)
-    # plt.show()
+    if 0:
+        raw_lines_slim = get_slim_lines(raw_lines)
+        img_h, img_w = x_map.shape
+        for raw_line, raw_line_slim in zip(raw_lines, raw_lines_slim):
+            img_line = np.zeros((img_h, img_w), dtype=np.uint8)
+            img_line_slim = np.zeros((img_h, img_w), dtype=np.uint8)
 
+            raw_line = np.array(raw_line)
+            xs, ys = raw_line[:, 0], raw_line[:, 1],
+            img_line[ys, xs] = 1
 
+            raw_line_slim = np.array(raw_line_slim)
+            if len(raw_line_slim) > 0:
+                xs, ys = raw_line_slim[:, 0], raw_line_slim[:, 1],
+                img_line_slim[ys, xs] = 1
+
+            plt.subplot(2, 1, 1)
+            plt.imshow(img_line)
+
+            plt.subplot(2, 1, 2)
+            plt.imshow(img_line_slim)
+            plt.show()
+        exit(1)
+
+    if debub_emb:
+        # 查看聚类的效果
+        img_h, img_w = x_map.shape
+        img_emb = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
+        for i, raw_line in enumerate(raw_lines):
+            color = color_list[i % len(color_list)]
+
+            # 将某个线段的heatmap拿出来
+            img_heatmamp_line = np.zeros_like(confidence_map)
+            for point in raw_line:
+                x, y = point
+                # img_emb[y, x] = (i + 1) * 100
+                img_emb[y, x] = color
+                img_heatmamp_line[y, x] = confidence_map[y, x]
+        #     if i == 3:
+        #         np.save("/home/liyongjing/Downloads/20231027/img_heatmamp_line.npy", img_heatmamp_line)
+        #     plt.imshow(img_heatmamp_line)
+        #     plt.title("img_heatmamp_line")
+        #     plt.show()
+        # exit(1)
+
+        plt.subplot(2, 1, 1)
+        plt.imshow(mask_map)
+        plt.subplot(2, 1, 2)
+        plt.imshow(img_emb)
+        plt.title("debub_emb")
+        plt.show()
+
+    # exit(1)
+    # np.save("/home/liyongjing/Downloads/debug/1.npy", raw_lines)
+    raw_lines = get_slim_lines(raw_lines)
     raw_lines = remove_short_lines(raw_lines)
     raw_lines = remove_far_lines(raw_lines)
 
+    #
     # img_h, img_w = x_map.shape
     # img_filter = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
     # for i, raw_line in enumerate(raw_lines):
@@ -562,6 +764,7 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
     # plt.subplot(2, 1, 2)
     # plt.imshow(img_filter)
     # plt.show()
+    # exit(1)
 
     exact_lines = []
     for each_line in raw_lines:
@@ -578,8 +781,8 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
         all_lines = serialize_all_lines(each_line, x_map, y_map,
                                             confidence_map, pred_emb_id,
                                             pred_cls_map, pred_orient_map,
-                                            pred_visible_map, pred_hanging_map, pred_covered_map
-                                            )
+                                            pred_visible_map, pred_hanging_map, pred_covered_map,
+                                            debug_piece_line=debug_piece_line)
         if len(all_lines) > 0:
             single_line = all_lines[0]
             if len(single_line) > 0:
@@ -587,14 +790,14 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
 
             if len(all_lines) > 1:
                 for single_line in all_lines[1:]:
-                    if len(single_line) > 50:
+                    if len(single_line) > 45:
                         exact_lines.append(single_line)
 
     # grid_size = 4
     # img_h, img_w = x_map.shape
     # img_serialize = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
     # for i, raw_line in enumerate(exact_lines):
-    #     color = color_list[i]
+    #     color = color_list[i % len(color_list)]
     #     for point in raw_line:
     #         x, y = point[:2]
     #         # img_emb[y, x] = (i + 1) * 100
@@ -783,6 +986,9 @@ class GlasslandBoundaryLine2DDecodeNumpy():
         self.grid_size = grid_size
         self.line_map_range = [0, -1]    # 不进行过滤
 
+        self.debub_emb = False
+        self.debug_piece_line = False
+
         # self.noise_filter = nn.MaxPool2d([3, 1], stride=1, padding=[1, 0])  # 去锯齿
     def get_line_cls(self, exact_curse_lines_multi_cls):
         output_curse_lines_multi_cls = []
@@ -936,7 +1142,7 @@ class GlasslandBoundaryLine2DDecodeNumpy():
                 points = np.array(exact_curse_line)
                 poitns_cls = points[:, 4]
 
-                if len(poitns_cls) > 5:
+                if len(poitns_cls) > 10:
                     # 进行平滑处理
                     line_x = exact_curse_line[:, 0]
                     line_y = exact_curse_line[:, 1]
@@ -951,7 +1157,7 @@ class GlasslandBoundaryLine2DDecodeNumpy():
                     exact_curse_line[:, 0][mask] = line_x[mask]
                     exact_curse_line[:, 1][mask] = line_y[mask]
 
-                    if len(exact_curse_line) > 0:
+                    if len(exact_curse_line) > 1:
                         lines.append(exact_curse_line)
 
             output_curse_lines_multi_cls.append(lines)
@@ -1027,7 +1233,8 @@ class GlasslandBoundaryLine2DDecodeNumpy():
                                                                                       ):
             _exact_lines = connect_line_points(_mask, _pred_emb, _pred_x,
                                                _pred_y, _pred_confidence, _pred_emb_id,
-                                               pred_cls, orient_pred, visible_pred, hanging_pred, covered_pred)
+                                               pred_cls, orient_pred, visible_pred, hanging_pred, covered_pred,
+                                               debub_emb=self.debub_emb, debug_piece_line=self.debug_piece_line)
 
             exact_lines.append(_exact_lines)
 

@@ -123,8 +123,8 @@ class GbldMono2dDatasetV2(BaseDataset):
         # img_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images/1696991348.057879.jpg"
         # ann_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/jsons/1696991348.057879.json"
 
-        # img_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images/1696991348.45783.jpg"
-        # ann_path = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/jsons/1696991348.45783.json"
+        # img_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231023_mmdet3d_2/train/images/1696991193.66982.jpg"
+        # ann_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231023_mmdet3d_2/train/jsons/1696991193.66982.json"
 
         img_name = os.path.split(img_path)[-1]
         ann_name = os.path.split(ann_path)[-1]

@@ -479,7 +479,6 @@ def debug_dataset(cfg):
                 plt.subplot(3, 3, 2)
                 plt.imshow(foreground_mask[0])
 
-
                 plt.subplot(3, 3, 3)
                 plt.imshow(gt_line_index[0])
 
@@ -522,7 +521,7 @@ def debug_dataset(cfg):
 
 if __name__ == '__main__':
     # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn.py"
-    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_datasetv2.py"
+    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_config_v0.3.py"
 
     # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
 
