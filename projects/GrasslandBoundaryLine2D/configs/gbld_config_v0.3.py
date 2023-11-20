@@ -14,6 +14,7 @@ work_dir = './work_dirs/' + experiment_name
 # data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231023_mmdet3d_2'
 # data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231031_mmdet3d_spline'
 # data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231101_mmdet3d_spline'
+# data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231110_mmdet3d_spline_by_cls'
 
 # 服务器数据
 # data_root = '/data-hdd/liyj/data/dataset/glass_edge_overfit_20231013_mmdet3d'
@@ -25,7 +26,12 @@ work_dir = './work_dirs/' + experiment_name
 # data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231031_mmdet3d_spline'
 # data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231101_mmdet3d_spline'
 # data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231102_mmdet3d_spline'
-data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231102_mmdet3d_spline_by_cls_by_visible'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231102_mmdet3d_spline_by_cls_by_visible'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231108_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231110_mmdet3d_spline_by_cls'
+
+data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231116_mmdet3d_spline_by_cls/'
+
 
 classes = [
             'road_boundary_line',
@@ -120,21 +126,28 @@ model = dict(
         with_hanging=True,                 # 是否预测点的悬空属性
         with_covered=True,                 # 是否预测点的草遮挡属性
 
-        in_feat_index=[0, 1],             # 对neck的feat进行选择,可选择在不同的分辨率上进行head的预测
-                                          # [0]: 代表选择第一个特征,在单层进行预测,可添加为多个
-                                          # 需同步修改strides, stage_loss_weight的数量和大小
-                                          # 需同步修改数据集生成中GgldLineMapsGenerate的gt_down_scales
+        # 选择在哪些分辨率的stages上进行预测
+        # 对neck的feat进行选择,可选择在不同的分辨率上进行head的预测
+        # [0]: 代表选择第一个特征,在单层进行预测,可添加为多个
+        # 需同步修改strides, stage_loss_weight的数量和大小
+        # 需同步修改数据集生成中GgldLineMapsGenerate的gt_down_scales
 
-        strides=[                         # 输入feat对应的下采样倍数,
-            4,                            # 可以调整backbone的num_outs来调整个数,或者start_level来调整下采样倍数
+        in_feat_index=[0,
+                       1,
+                       2,
+                       # 3,
+                       ],
+
+        strides=[                          # 输入feat对应的下采样倍数,
+            4,                             # 可以调整backbone的num_outs来调整个数,或者start_level来调整下采样倍数
             8,
-            # 16,
+            16,
             # 32,
         ],
 
         stage_loss_weight=[2.0,           # 设置不同stage的loss权重
                            1.5,
-                           # 1.0,
+                           1.0,
                            # 0.5
                            ],
 
@@ -166,7 +179,9 @@ model = dict(
             type='GbldSegLoss',
             focal_loss_gamma=2.0,
             alpha=0.25,
-            loss_weight=1.0),
+            loss_weight=1.0,
+            use_dist_weight=False,  # 是否使用距离加权, y越大权重越大
+            max_dist_weight=3.0),  # 最大y的权重
 
         loss_offset=dict(
             type='GbldOffsetLoss',
@@ -283,8 +298,10 @@ train_dataloader = dict(
             dict(type='GgldRandomFlip', prob=0.5, direction=['horizontal']),
 
             # gt_down_scales用来产生不同下采样倍数下的gt,需要跟head输出的分辨率保持一致和stage保持一致
-            # dict(type='GgldLineMapsGenerate', gt_down_scales=[4, 8, 16, 32], num_classes=num_classes),
-            dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4, 8], num_classes=num_classes),
+            # dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4, 8, 16, 32], num_classes=num_classes),
+            dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4, 8, 16], num_classes=num_classes),
+            # dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4, 8], num_classes=num_classes),
+            # dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4], num_classes=num_classes),
 
             # dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
             dict(

@@ -9,7 +9,9 @@ class GbldSegLoss(nn.Module):
     def __init__(self,
                  focal_loss_gamma=2.0,
                  alpha=0.25,
-                 loss_weight=1.0):
+                 loss_weight=1.0,
+                 use_dist_weight=False,
+                 max_dist_weight=5.0):
         """`Focal Loss <https://arxiv.org/abs/1708.02002>`_
 
         Args:
@@ -28,6 +30,8 @@ class GbldSegLoss(nn.Module):
         self.focal_loss_gamma = focal_loss_gamma        # focal_loss_gamma
         self.alpha = alpha                              # 暂时没用
         self.loss_weight = loss_weight                  # 该loss的权重
+        self.use_dist_weight = use_dist_weight          # 是否使用距离加权, y越大权重越大
+        self.max_dist_weight = max_dist_weight          # 最大y的权重
 
     def forward(self,
                 seg_pred,
@@ -43,6 +47,15 @@ class GbldSegLoss(nn.Module):
                 seg_pred, gt_seg, reduction="none", pos_weight=torch.tensor(5.0)
             )
             seg_loss = torch.pow(1.0 - p, self.focal_loss_gamma) * seg_loss
+
+            # # 加强对近处的loss
+            if self.use_dist_weight:
+                N, C, H, W = seg_loss.shape
+                dist_weight_col = torch.arange(1, self.max_dist_weight, (self.max_dist_weight - 1) / H)
+                dist_weight = dist_weight_col.repeat(1, W).reshape(W, H).transpose(1, 0)
+                dist_weight = dist_weight.to(seg_loss.device)
+                dist_weight.requires_grad = False
+                seg_loss = seg_loss * dist_weight
 
             seg_loss = seg_loss[gt_ignore_mask].mean()
 

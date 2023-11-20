@@ -57,8 +57,6 @@ def onnx_export(self, batch_inputs):
 
 def main():
     # save_root = "/home/dell/liyongjing/test_data/debug"
-
-
     # build the model from a config file and a checkpoint file
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/configs/gbld_debug_config.py"
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/work_dirs/gbld_debug/20230804_164059/vis_data/config.py"
@@ -87,8 +85,21 @@ def main():
     # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231026_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
 
     # 20231102 gbld_20231102.onnx
-    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
-    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 20231109 gbld_20231109.onnx
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/release/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/release/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/epoch_250.pth"
+
+    # 20231109 gbld_20231113.onnx
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/epoch_250.pth"
+
+    # 20231109 gbld_20231118.onnx
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231116_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/gbld_config_v0.3.py"
+    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231116_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/epoch_250.pth"
+
 
     save_root = os.path.split(config_path)[0]
 
@@ -129,7 +140,7 @@ def main():
     #         input_len = input_len * s
     #     print("output_len {}:{}".format(0, input_len))
 
-    out_path = save_root + "/" + "gbld_20231102.onnx"
+    out_path = save_root + "/" + "gbld_20231118.onnx"
     with torch.no_grad():
         torch.onnx.export(
             model,
@@ -222,7 +233,6 @@ def main():
     #             exit(1)
 
         # print("ff")
-
 
 
 if __name__ == "__main__":

@@ -431,15 +431,17 @@ def generate_mmdet3d_trainval_infos(generate_dataset_infos):
         metainfo = annotations['metainfo']
         raw_data_list = annotations['data_list']
 
-        print("metainfo:", metainfo)
-        print("raw_data_list:", raw_data_list)
+        # print("metainfo:", metainfo)
+        # print("raw_data_list:", raw_data_list)
 
 
 def combine_images_jsons():
-    root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231020_v0.2/download/2023_10_24"
+    root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2/download/2023_11_16"
     # 20231025
     # 16  17  22  23  24  25  26 27 28
-    sub_dirs = ["16",  "17",  "22",  "23",  "24",  "25",  "26", "27",  "28",  "29"]
+    sub_dirs = ["16",  "17",  "22",  "23",  "24",  "25",
+                "26", "27",  "28",  "29",  "32",  "33", "34", "35",
+                "36", "37", "39", "40", "44", "45"]
 
     dst_dir = "all"
     dst_root = os.path.join(root, dst_dir)
@@ -644,6 +646,41 @@ def get_test_names(test_info_path):
     return test_names
 
 
+def filter_images_labels():
+    root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2/download/2023_11_10/37_part"
+    dst_img_root = os.path.join(root, "images_filter")
+    dst_json_root = os.path.join(root, "json_filter")
+
+    for path in [dst_img_root, dst_json_root]:
+        if os.path.exists(path):
+            shutil.rmtree(path)
+        os.mkdir(path)
+
+    root_img_root = os.path.join(root, "images")
+    root_json_root = os.path.join(root, "json")
+
+    img_names = [name for name in os.listdir(root_img_root) if name[-4:] in [".jpg", '.png']]
+    for img_name in tqdm(img_names, desc="img_names"):
+        img_path = os.path.join(root_img_root, img_name)
+        json_path = os.path.join(root_json_root, img_name[:-4] + ".json")
+
+        with open(json_path, "r") as fp:
+            labels = json.load(fp)
+
+        # 如果没有标注信息, 代表为空
+        if len(labels["data"]) == 0:
+            continue
+
+        dst_img_path = os.path.join(dst_img_root, img_name)
+        dst_json_path = os.path.join(dst_json_root, img_name[:-4] + ".json")
+
+        shutil.copy(img_path, dst_img_path)
+        shutil.copy(json_path, dst_json_path)
+
+
+
+
+
 if __name__ == "__main__":
     # 在v0.2的版本中,采用分段标注的方式和分配属性的方式
     # 属性包括可见属性、被草遮挡和悬空属性等
@@ -660,7 +697,7 @@ if __name__ == "__main__":
         "metainfo": {
             'dataset': 'GbldMono2dDataset',
             'info_version': '1.0',
-            'data': "2023-10-17",
+            'data': "2023-11-16",
             },
 
         "dense_points": True,
@@ -698,20 +735,24 @@ if __name__ == "__main__":
         "src_root": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2",
         #  如果是None则随机产生测试集,如果提供则采用提供的信息作为测试集
         "test_info_path": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231020_v0.2/gbld_infos_test_20231024.pkl",
-        "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231102_mmdet3d_spline_by_cls_by_visible",
+        "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231116_mmdet3d_spline_by_cls",
+        # "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231113_mmdet3d",
 
     }
 
     # 将文件整理到一个文件夹中
     # combine_images_jsons()
 
-    # 转成dataset数据格式
-    parse_v02_data_2_lld_data(generate_dataset_infos)
+    # 将没有标注的文件过滤
+    # filter_images_labels()
 
     # 可视化生成json文件
-    # debug_parse_dataset_json(generate_dataset_infos)
+    debug_parse_dataset_json(generate_dataset_infos)
+
+    # 转成dataset数据格式
+    # parse_v02_data_2_lld_data(generate_dataset_infos)
 
     # 生成mmdet3d数据加载的相关信息
-    generate_mmdet3d_trainval_infos(generate_dataset_infos)
+    # generate_mmdet3d_trainval_infos(generate_dataset_infos)
 
 

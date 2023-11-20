@@ -286,7 +286,7 @@ def debug_model_infer_decode(config_path, checkpoint_path):
     # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train/images"
     # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/test/images"
     # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_07_59/images"
-    test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231102_mmdet3d_spline/test/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231102_mmdet3d_spline/test/images"
 
     # lwj-2023-10-25
     # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_07_59/images"
@@ -294,7 +294,24 @@ def debug_model_infer_decode(config_path, checkpoint_path):
     # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_24_14/images"
     # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231023/rosbag2_2023_10_11-10_28_36/images"
 
+    # 采集车采集2023-11-08
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231109/rosbag2_2023_11_08-16_06_57_yanbian/images"
 
+    # 公司对面草地采集
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231110/rosbag2_2023_11_10-11_44_23/images_camera_front"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231109/rosbag2_2023_11_08-16_06_57_yanbian/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231113/rosbag2_2023_11_13-09_53_33/images"
+
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/select_test_20231114"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231110_mmdet3d_spline_by_cls/test/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231110_mmdet3d_spline_by_cls/test/images"
+
+    # 树边带坑
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231114/rosbag2_2023_11_14-16_11_14/images"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231110_mmdet3d_spline_by_cls/test/images"
+
+    test_root = "/home/liyongjing/Egolee/hdd-data/test_data/select_test_20231117"
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/debug"
     print(test_root)
     model = init_model(config_path, checkpoint_path, device='cuda:0')
     cfg = model.cfg
@@ -339,7 +356,7 @@ def debug_model_infer_decode(config_path, checkpoint_path):
         # img_name = "c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_9201.jpg"   # 灌木丛线
         # img_name = "1689848713868127775.jpg"
         # img_name = "1695031405813262853.jpg"
-        img_name = "1695031238613012474.jpg"
+        # img_name = "1695031238613012474.jpg"
 
         # 细化导致的问题
         # img_name = "c0bfbf61-2adf-40d3-85b1-ed9332a5fedb_front_camera_6761.jpg"   # 聚类效果问题
@@ -355,9 +372,59 @@ def debug_model_infer_decode(config_path, checkpoint_path):
         # img_name = "1696990178.992459.jpg"
         # img_name = "1696990178.992459.jpg"
         # img_name = "1696990178.592509.jpg"
+        # img_name = "1696990178.592509.jpg"      # 在远处的线会叠加到一起
 
-        glass_land_boundary_line_2d_decode_numpy.debub_emb = True
-        glass_land_boundary_line_2d_decode_numpy.debug_piece_line = True
+        # 点排序的验证
+        # img_name = "1695031549185622139.jpg"
+
+        # 采集车采集 2023-11-08
+        # img_name = "1699430863.116359.jpg"
+        # img_name = "1699430900.64799.jpg"
+        # img_name = "1699430840.150728.jpg"
+
+        # 采集车公司对面采集
+        # img_name = "1699587863.896535.jpg"
+        # img_name = "1699430890.448459.jpg"
+
+        # 分析圆形的检测效果不好的情况
+        # img_name = "1699840642.113791.jpg"  # 地灯
+        # img_name = "1699840777.207751.jpg"  # 井盖
+
+        # img_name = "1696990178.592509.jpg"
+        # img_name = "1699949529.037394.jpg"
+        # img_name = "1699949526.737498.jpg"
+        # img_name = "1699949527.637458.jpg"
+        # img_name = "1699949526.737498.jpg"
+        # img_name = "1699949527.637458.jpg"
+        # img_name = "1699949528.837429.jpg"
+        # img_name = "1699949529.437395.jpg"
+        # img_name = "1699949664.932432.jpg"
+        # img_name = "1699949722.730314.jpg"
+
+        # 分析测试集的情况
+        # img_name = "1689848734654320005.jpg"     # 分段，原因为中间小的piece-line过滤了
+        # img_name = "1699949723.730288.jpg"
+
+        # 分析树边带坑
+        # img_name = "1699949477.739274.jpg"
+        # img_name = "1699949682.731791.jpg"
+
+        # 测试集
+        # img_name = "1695031238613012474.jpg"
+        # img_name = "1695030227549081836.jpg"    # 用了骨架细化会有后退
+
+        # 20231117
+        # img_name = "1699840777.207751.jpg"    # 井盖的问题
+        # img_name = "1695031238613012474.jpg"  # 道路中间垂直
+        img_name = "1699840593.682635.jpg"       # 道路边垂直
+
+        glass_land_boundary_line_2d_decode_numpy.debub_emb = 1
+        glass_land_boundary_line_2d_decode_numpy.debug_existing_points = 1
+        glass_land_boundary_line_2d_decode_numpy.debug_piece_line = 0
+        glass_land_boundary_line_2d_decode_numpy.debug_exact_line = 0
+
+        # glass_land_boundary_line_2d_decode_numpy.debub_emb = False
+        # glass_land_boundary_line_2d_decode_numpy.debug_piece_line = False
 
         count = count + 1
         if count % jump != 0:
@@ -425,6 +492,7 @@ def debug_model_infer_decode(config_path, checkpoint_path):
                 results = model.predict(batch_inputs=collate_data["inputs"],
                                         batch_data_samples=collate_data["data_samples"], rescale=False)
                 results = results[0]
+
                 img_show = draw_pred_result(img_show, results)
 
                 meta_info = results.metainfo
@@ -585,8 +653,16 @@ if __name__ == "__main__":
     # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231031_batch_12_with_crop_split_line_10_emb_weight/epoch_100.pth"
 
     # 20231102
-    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
-    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231102_batch_12_with_crop_split_line_10_emb_weight/epoch_250.pth"
+
+    # 20231108
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/epoch_250.pth"
+
+    # 20231113
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/gbld_config_v0.3.py"
+    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/epoch_250.pth"
 
     debug_model_infer_decode(config_path, checkpoint_path)
     print("End")

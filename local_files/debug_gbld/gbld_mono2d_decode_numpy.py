@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 # from mmdet3d.registry import MODELS
 import numpy as np
 import cv2
+from skimage import morphology
+import time
 
 color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
               (230, 216, 173), (128, 0, 128), (203, 192, 255), (238, 130, 238), (130, 0, 75),
@@ -70,10 +72,12 @@ def remove_isolated_points(line_points):
 
 
 def compute_vertical_distance(point, selected_points):
+    # 判断与原来是否有与x相等的点, 如果没有那么将直接加入,保证x方向可以铺满
     vertical_points = [s_pnt for s_pnt in selected_points if s_pnt[0] == point[0]]
     if len(vertical_points) == 0:
         return 0
     else:
+        # 如果存在x相等的点,判断一下x相等时的最近点的距离, 这种处理会将u形的点分段
         vertical_distance = 10000
         for v_pnt in vertical_points:
             distance = abs(v_pnt[1] - point[1])
@@ -85,14 +89,19 @@ def select_function_points(selected_points, near_points):
     while len(near_points) > 0:
         added_points = []
         for n_pnt in near_points:
+            # 进行区域生长,但是在x方向不能往回生长
             for s_pnt in selected_points:
                 distance = max(abs(n_pnt[0] - s_pnt[0]), abs(n_pnt[1] - s_pnt[1]))
+                # 满足区域生长的条件,在select_points的一个点的8邻域
                 if distance == 1:
+                    # 在selected_points查找是否存在x相同的点,计算x相同的点中的垂直距离,这样的处理会将回环的断开
                     vertical_distance = compute_vertical_distance(n_pnt, selected_points)
+
                     if vertical_distance <= 1:
                         selected_points = [n_pnt] + selected_points
                         added_points.append(n_pnt)
                         break
+
         if len(added_points) == 0:
             break
         else:
@@ -127,6 +136,105 @@ def extend_endpoints(selected_points, single_line):
     return selected_points
 
 
+def sort_points_by_min_dist(image_xs, image_ys):
+    points = np.array([[xs, ys] for xs, ys in zip(image_xs, image_ys)])
+    point_n = len(points)
+
+    points_mask = np.array([True] * point_n)
+    points_idx = np.arange(point_n)
+
+    select_idx = len(points) - 1
+    points_mask[select_idx] = False
+
+    indices = []
+    indices.append(select_idx)
+
+    while np.sum(points_mask) > 0:
+        other_points = points[points_mask]
+
+        other_points_idx = points_idx[points_mask]
+
+        select_point = points[select_idx]
+        point_dists = np.sqrt((other_points[:, 0] - select_point[0]) ** 2 + \
+                      (other_points[:, 1] - select_point[1]) ** 2)
+
+        select_idx = np.argmin(point_dists)
+        min_dist = point_dists[select_idx]
+        if min_dist > 50:
+            break
+
+        select_idx = other_points_idx[select_idx]
+
+        points_mask[select_idx] = False
+        indices.append(select_idx)
+
+    return indices
+
+
+def sort_point_by_x_y(image_xs, image_ys):
+    # 首先按照x从小到大排序，在x相同的位置，按照与上一个x对应的y进行排序
+    indexs = image_xs.argsort()
+    image_xs_sort = image_xs[indexs]
+    image_ys_sort = image_ys[indexs]
+
+    # 将第一个点加入
+    x_same = image_xs_sort[0]  # 判断是否为同一个x
+    y_pre = image_ys_sort[0]  # 上一个不是同一个相同x的点的y
+
+    indexs_with_same_x = [indexs[0]]  # 记录相同的x的index
+    ys_with_same_x = [image_ys_sort[0]]  # 记录具有相同x的ys
+
+    new_indexs = []
+    for i, (idx, x_s, y_s) in enumerate(zip(indexs[1:], image_xs_sort[1:], image_ys_sort[1:])):
+        if x_s == x_same:
+            indexs_with_same_x.append(idx)
+            ys_with_same_x.append(y_s)
+        else:
+            # 如果当前xs与前面的不一样，将前面的进行截断统计分析
+            # 对y进行排序， 需要判断y是从大到小还是从小到大排序, 需要跟上一个x对应的y来判断，距离近的排在前面
+            # 首先按照从小到大排序
+            index_y_with_same_x = np.array(ys_with_same_x).argsort()
+
+            # 判断是否需要倒转过来排序
+            if len(index_y_with_same_x) > 1:
+                if abs(index_y_with_same_x[-1] - y_pre) < abs(index_y_with_same_x[0] - y_pre):
+                    index_y_with_same_x = index_y_with_same_x[::-1]
+
+            new_indexs = new_indexs + np.array(indexs_with_same_x)[index_y_with_same_x].tolist()
+
+            # 为下次的判断作准备
+            y_pre = ys_with_same_x[index_y_with_same_x[-1]]
+            x_same = x_s
+            indexs_with_same_x = [idx]
+            ys_with_same_x = [y_s]
+
+        if i == len(image_xs) - 2:  # 判断是否为最后一个点
+            index_y_with_same_x = np.array(ys_with_same_x).argsort()
+            if len(index_y_with_same_x) > 1:
+                if abs(index_y_with_same_x[-1] - y_pre) < abs(index_y_with_same_x[0] - y_pre):
+                    index_y_with_same_x = index_y_with_same_x[::-1]
+            new_indexs = new_indexs + np.array(indexs_with_same_x)[index_y_with_same_x].tolist()
+    return new_indexs
+
+def sort_point_by_x_and_y_direction(image_xs, image_ys):
+    # 首先按照x从小到大排序，判断线的主体方向，在x相同的位置，按照线主体方向进行排序
+    indexs = image_xs.argsort()
+    # image_xs_sort = image_xs[indexs]
+    image_ys_sort = image_ys[indexs]
+
+    # 判断线的方向主体方向
+    y_direct = image_ys_sort[0] - image_ys_sort[-1]
+    if y_direct > 0:
+        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从大到小进行排序
+        sorted_indices = np.lexsort((-image_ys, image_xs))
+    else:
+        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从小到大进行排序
+        sorted_indices = np.lexsort((image_ys, image_xs))
+    return sorted_indices
+
+# def arrange_points_filter():
+
+
 def arrange_points_to_line(selected_points, x_map, y_map, confidence_map,
                            pred_emb_id_map, pred_cls_map, pred_orient_map=None,
                            pred_visible_map=None, pred_hanging_map=None, pred_covered_map=None,
@@ -144,11 +252,12 @@ def arrange_points_to_line(selected_points, x_map, y_map, confidence_map,
     # plt.show()
     # exit(1)
 
-
     emb_ids = pred_emb_id_map[ys, xs]
     clses = pred_cls_map[ys, xs]
 
-    indices = image_xs.argsort()
+    # indices = image_xs.argsort()
+    indices = sort_point_by_x_and_y_direction(image_xs, image_ys)
+
     image_xs = image_xs[indices]
     image_ys = image_ys[indices]
     confidences = confidences[indices]
@@ -206,7 +315,7 @@ def compute_point_distance(point_0, point_1):
     return distance
 
 
-def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
+def connect_piecewise_lines(piecewise_lines, endpoint_distance=16, grid_size=4, map_h=152, map_w=240):
     long_lines = piecewise_lines
     final_lines = []
     while len(long_lines) > 1:
@@ -227,13 +336,23 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
         for i, c_end in enumerate(current_endpoints):
             for j, o_end in enumerate(other_endpoints):
                 distance = compute_point_distance(c_end, o_end)
+                # print("c_end", c_end, o_end)
                 if distance < min_dist:
                     point_ids[0] = i
                     point_ids[1] = j
                     min_dist = distance
 
         # 如果两个选择端点存在距离小于阈值的端点, 则两条线合并, 合并完毕后继续进行类似的合并操作
+        # print("endpoint_distance:", endpoint_distance)
+        # print("min_dist:", min_dist)
+        near_point_merge = True
+        if current_endpoints[point_ids[0]][1] > map_h * grid_size * 0.8:
+            if min_dist < endpoint_distance * 2:
+                near_point_merge = True
+
         if min_dist < endpoint_distance:
+        # 待最新的模型训练完成后看是否需要再近距离加入这个条件
+        # if min_dist < endpoint_distance or near_point_merge:
             adjacent_line = other_lines[point_ids[1] // 2]
             other_lines.remove(adjacent_line)
 
@@ -305,54 +424,38 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
                     near_points.append(a_pnt)
                 else:
                     far_points.append(a_pnt)
+
+            # 如果y-1后没有near_points, 输出线段
             if len(near_points) == 0:
                 break
+
+            # 计算near_points与selected_points的距离, 与selected_points的中存在距离小于1的需要加上
+            #
             selected_points, outliers = select_function_points(
                 selected_points, near_points
             )
+
+            # 如果没有新的点加入, 输出线段
             if len(outliers) == len(near_points):
                 break
             else:
+                # 将远处的点和没有加入的点重新作为alternative_points
                 alternative_points = outliers + far_points
                 y -= 1
 
-        # 在x方向进行延伸
+        # 得到左右端点, 在原来的single_line上进行x方向的延伸判断
+        # (并非在alternative_points上进行判断,alternative_points上的点可能不是完整的点)
+        # 目前这个方法感觉就是x优先的方法,对垂直的线效果确实不是很友好
         selected_points = extend_endpoints(selected_points, single_line)
+
         piecewise_line = arrange_points_to_line(
             selected_points, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map, pred_orient_map,
             pred_visible_map, pred_hanging_map, pred_covered_map
         )
+
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
         piecewise_lines.append(piecewise_line)
         existing_points = alternative_points
-    #
-    # grid_size = 4
-    # img_h, img_w = x_map.shape
-    # img_piecewise_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
-    # for i, raw_line in enumerate(piecewise_lines):
-    #     color = color_list[i]
-    #     pre_point = raw_line[0]
-    #
-    #     for cur_point in raw_line[1:]:
-    #         # x, y = cur_point[:2]
-    #         # img_piecewise_lines[y, x] = color
-    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
-    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
-    #
-    #         cv2.line(img_piecewise_lines, (x1, y1), (x2, y2), color, 1, 8)
-    #         pre_point = cur_point
-    #
-    #     start_point = raw_line[0]
-    #     end_point = raw_line[-1]
-    #     cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
-    #     cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
-    #
-    # plt.subplot(2, 1, 1)
-    # plt.imshow(confidence_map)
-    # plt.subplot(2, 1, 2)
-    # plt.imshow(img_piecewise_lines)
-    # plt.show()
-    # exit(1)
 
     if len(piecewise_lines) == 0:
         return []
@@ -362,48 +465,48 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
 
         exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)[0]
         # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
-    #
-    # grid_size = 4
-    # img_h, img_w = x_map.shape
-    # img_exact_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
-    # # for i, raw_line in enumerate([exact_lines]):
-    # for i, raw_line in enumerate(all_exact_lines):
-    #     color = color_list[i]
-    #     pre_point = raw_line[0]
-    #
-    #     for cur_point in raw_line[1:]:
-    #         # x, y = cur_point[:2]
-    #         # img_piecewise_lines[y, x] = color
-    #         x1, y1 = int(pre_point[0]), int(pre_point[1])
-    #         x2, y2 = int(cur_point[0]), int(cur_point[1])
-    #
-    #         cv2.line(img_exact_lines, (x1, y1), (x2, y2), color, 1, 8)
-    #         pre_point = cur_point
-    #     start_point = raw_line[0]
-    #     end_point = raw_line[-1]
-    #     cv2.circle(img_exact_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
-    #     cv2.circle(img_exact_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
-    #
-    # plt.subplot(2, 1, 1)
-    # plt.imshow(confidence_map)
-    # plt.subplot(2, 1, 2)
-    # plt.imshow(img_exact_lines)
-    # plt.show()
-    # exit(1)
 
     if exact_lines[0][1] < exact_lines[-1][1]:
         exact_lines.reverse()
     return exact_lines
 
+def split_piecewise_lines(piecewise_lines, split_dist=12):
+    split_piecewise_lines = []
+    for i, raw_line in enumerate(piecewise_lines):
+        pre_point = raw_line[0]
+        start_idx = 0
+        end_idx = 0
+
+        for j, cur_point in enumerate(raw_line[1:]):
+            point_dist = compute_point_distance(pre_point, cur_point)
+            if point_dist > split_dist:
+                split_piecewise_line = raw_line[start_idx:end_idx+1]
+                if len(split_piecewise_line) > 1:
+                    split_piecewise_lines.append(split_piecewise_line)
+
+                start_idx = j + 1   # 需要加上0-index的长度
+
+            pre_point = cur_point
+            end_idx = j + 1
+
+            if j == len(raw_line) - 2:
+                split_piecewise_line = raw_line[start_idx:end_idx+1]
+                if len(split_piecewise_line) > 1:
+                    split_piecewise_lines.append(split_piecewise_line)
+    return split_piecewise_lines
 
 def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map,
                           pred_orient_map=None, pred_visible_map=None, pred_hanging_map=None,
-                          pred_covered_map=None, debug_piece_line=False):
+                          pred_covered_map=None,
+                          grid_size=4,
+                          debug_existing_points=False,
+                          debug_piece_line=False,
+                          debug_exact_line=False):
 
     existing_points = single_line.copy()
 
     # debug existing_points
-    if 1:
+    if debug_existing_points:
         img_h, img_w = x_map.shape
         img_existing_points = np.zeros((img_h, img_w), dtype=np.uint8)
         for existing_point in existing_points:
@@ -412,7 +515,9 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
 
         plt.imshow(img_existing_points)
         plt.title("img_existing_points")
-        plt.show()
+        # plt.show()
+        plt.show(block = True)
+        plt.close('all')
 
     piecewise_lines = []
     while len(existing_points) > 0:
@@ -457,16 +562,23 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
 
         # piecewise_lines.append(piecewise_line)
         # 将点太少的线去除 modify-liyj 2023-11-2
-        if len(piecewise_line) > 3:
+        # if len(piecewise_line) > 1:
+        if len(piecewise_line) > 1:
             piecewise_lines.append(piecewise_line)
 
         existing_points = alternative_points
+
+    # 在这里判断是否继续对line进行分段，如果两个点的距离太大就会断开，防止两个相邻点之间的距离过大
+    piecewise_lines = split_piecewise_lines(piecewise_lines, split_dist=12)
 
     # 查看每条线中线段分段情况
     if debug_piece_line:
         grid_size = 4
         img_h, img_w = x_map.shape
         img_piecewise_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
+
+        # np.savez("/home/liyongjing/Egolee/programs/mmdetection3d-liyj/local_files/debug_gbld/data/debug_pieces_points_20231116_2.npz", *piecewise_lines)
+        # exit(1)
         for i, raw_line in enumerate(piecewise_lines):
             if i > len(color_list)-1:
                 color = [np.random.randint(0, 255) for i in range(3)]
@@ -486,16 +598,18 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
 
             start_point = raw_line[0]
             end_point = raw_line[-1]
-            cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
-            cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
-
-        plt.subplot(2, 1, 1)
-        plt.imshow(confidence_map)
-        plt.subplot(2, 1, 2)
+            cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 5, color)
+            cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 5, color)
+            # time.sleep(0.1)
+        # plt.subplot(2, 1, 1)
+        # plt.imshow(confidence_map > 0.2)
+        # plt.imshow(confidence_map)
+        # plt.subplot(2, 1, 2)
         plt.imshow(img_piecewise_lines)
         plt.title("debug_piece_line")
-        plt.show()
-    # exit(1)
+        # plt.show()
+        plt.show(block=True)
+        plt.close('all')
 
     if len(piecewise_lines) == 0:
         return []
@@ -506,9 +620,12 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
 
         # exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=40)[0]
         # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=30)
-        all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
+        map_h, map_w = x_map.shape
+        # endpoint_distance=16
+        all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16,
+                                                  grid_size=grid_size, map_h=map_h, map_w=map_w)
 
-    if 1:
+    if debug_exact_line:
         grid_size = 4
         img_h, img_w = x_map.shape
         img_exact_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
@@ -535,7 +652,9 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
         plt.subplot(2, 1, 2)
         plt.imshow(img_exact_lines)
         plt.title("debug_exact_line")
-        plt.show()
+        # plt.show()
+        plt.show(block=True)
+        plt.close('all')
         # exit(1)
 
     for all_exact_line in all_exact_lines:
@@ -596,14 +715,6 @@ def get_line_key_point(line, order, fixed):
                 start_ind = index[i]
                 continue
             # if abs(index[i] - last_ind) > 1 or i == len(index) - 1:
-            #     end_ind = last_ind
-            #     start = False
-            #     if order == 0:
-            #         keypoint.append([fixed, int((start_ind + end_ind) / 2)])
-            #     else:
-            #         keypoint.append([int((start_ind + end_ind) / 2), fixed])
-            #     start_ind = index[i]
-
             if abs(index[i] - last_ind) > 1:
                 end_ind = last_ind
                 start = False
@@ -627,7 +738,6 @@ def get_line_key_point(line, order, fixed):
                 else:
                     keypoint.append([int((start_ind + end_ind) / 2), fixed])
                 start_ind = index[i]
-
             last_ind = index[i]
 
     return keypoint
@@ -641,6 +751,117 @@ def get_slim_points(line, start_x, end_x, start_y, end_y, step, order):
     return slim_points
 
 
+
+
+def zhang_suen_thining_condiction2(x1, x2, x3, x4, x5, x6, x7, x8, x9):
+    f1 = 0
+    if (x3 - x2) == 1:
+        f1 += 1
+    if (x4 - x3) == 1:
+        f1 += 1
+    if (x5 - x4) == 1:
+        f1 += 1
+    if (x6 - x5) == 1:
+        f1 += 1
+    if (x7 - x6) == 1:
+        f1 += 1
+    if (x8 - x7) == 1:
+        f1 += 1
+    if (x9 - x8) == 1:
+        f1 += 1
+    if (x2 - x9) == 1:
+        f1 += 1
+    return f1
+
+
+def get_point_neighbor(line, point, b_inv=True):
+    # b_inv为true的时候,1代表neighbor不存在
+    # 这里的计算对应的图像坐标系 y-1 为x2, 图像的实现方式
+    # x9 x2 x3
+    # x8 x1 x4
+    # x7 x6 x5
+
+    # 但是计算出来的线实际为y+1为x2, 修改y的offset来实现
+    # x1, x2, x3, x4, x5, x6, x7, x8, x9
+    x_offset = [0,  0,  1,  1,  1,  0,  -1, -1, -1]
+    # y_offset = [0, -1, -1,  0,  1,  1,   1,  0, -1]    # y-1 为x2
+    y_offset = [0,  1,  1, 0, -1, -1,  -1,  0, 1]    # y+1 为x2
+    point_neighbors = []
+    x_p, y_p = point[0], point[1]
+
+    line_points = line
+    for x_o, y_o in zip(x_offset, y_offset):
+        x_n, y_n = x_p + x_o, y_p + y_o
+        if b_inv:
+            not_has_neighbot = 1 if [x_n, y_n] not in line_points else 0
+            # if not_has_neighbot != 0:
+            #     print("fffff")
+            #     exit(1)
+            point_neighbors.append(not_has_neighbot)
+        else:
+            has_neighbot = 1 if [x_n, y_n] in line_points else 0
+            point_neighbors.append(has_neighbot)
+    return point_neighbors
+
+def zhang_suen_thining_points(line):
+    # line = line.tolist()
+    out = line.tolist()
+    while True:
+        s1 = []
+        s2 = []
+        # x9 x2 x3
+        # x8 x1 x4
+        # x7 x6 x5
+        for point in out:
+            # condition 2
+            x1, x2, x3, x4, x5, x6, x7, x8, x9 = get_point_neighbor(out, point, b_inv=True)
+            f1 = zhang_suen_thining_condiction2(x1, x2, x3, x4, x5, x6, x7, x8, x9)
+            if f1 != 1:
+                continue
+
+            # condition 3
+            f2 = (x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9)
+            if f2 < 2 or f2 > 6:
+                continue
+
+            # condition 4
+            # x2 x4 x6
+            if (x2 + x4 + x6) < 1:
+                continue
+
+            # x4 x6 x8
+            if (x4 + x6 + x8) < 1:
+                continue
+            s1.append(point)
+
+        # 将s1中的点去除
+        out = [point for point in out if point not in s1]
+        for point in out:
+            x1, x2, x3, x4, x5, x6, x7, x8, x9 = get_point_neighbor(out, point, b_inv=True)
+            f1 = zhang_suen_thining_condiction2(x1, x2, x3, x4, x5, x6, x7, x8, x9)
+
+            if f1 != 1:
+                continue
+
+            f2 = (x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9)
+            if f2 < 2 or f2 > 6:
+                continue
+
+            if (x2 + x4 + x6) < 1:
+                continue
+
+            if (x4 + x6 + x8) < 1:
+                continue
+            s2.append(point)
+
+        # 将s2中的点去除
+        out = [point for point in out if point not in s2]
+
+        # if not any pixel is changed
+        if len(s1) < 1 and len(s2) < 1:
+            break
+    return out
+
 def get_slim_lines(lines):
     slim_lines = []
     for line in lines:
@@ -650,30 +871,35 @@ def get_slim_lines(lines):
         ymin, ymax = min(ys), max(ys)
 
         pixel_step = 1
-        x_len = xmax - xmin
-        y_len = ymax - ymin
-        ratio_len = max(x_len, y_len) / (min(x_len, y_len) + 1e-8)
-        if ratio_len > 2:
-            if x_len > y_len:
-                order = 0
-                slim_points = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
-            else:
-                order = 1
-                slim_points = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
-        else:
-            order = 0
-            slim_points_x = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
-            order = 1
-            slim_points_y = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
-            slim_points = slim_points_x + slim_points_y
+        # 判断条件采用ch单边slim处理
+        # x_len = xmax - xmin
+        # y_len = ymax - ymin
+        # ratio_len = max(x_len, y_len) / (min(x_len, y_len) + 1e-8)
 
-        # 对y进行倒序排序
-        # slim_points = np.array(slim_points)
-        # xs, ys = slim_points[:, 0], slim_points[:, 1]
-        # sorted_indices = np.argsort(ys)[::-1]
-        # slim_points = slim_points[sorted_indices].tolist()
+        # 修改为采用两个方向的slim操作，不考虑单边slim
+        # if ratio_len > 2:
+        #     if x_len > y_len:
+        #         order = 0
+        #         slim_points = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
+        #     else:
+        #         order = 1
+        #         slim_points = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
+        # else:
+
+        # 直接采用ch双边slim处理
+        # order = 0
+        # slim_points_x = get_slim_points(line, xmin, xmax, ymin, ymax, pixel_step, order)
+        # order = 1
+        # slim_points_y = get_slim_points(line, ymin, ymax, xmin, xmax, pixel_step, order)
+        # slim_points = slim_points_x + slim_points_y
+
+        # 采用zhang_suen骨架算法
+        slim_points = zhang_suen_thining_points(line)
 
         # if len(slim_points) > 1:
+        # 去除孤立的点
+        # slim_points = remove_isolated_points(slim_points)
+
         slim_lines.append(slim_points)
     return slim_lines
 
@@ -682,7 +908,13 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
                         confidence_map, pred_emb_id, pred_cls_map,
                         pred_orient_map=None, pred_visible_map=None,
                         pred_hanging_map=None, pred_covered_map=None, line_maximum=10,
-                        debub_emb=False, debug_piece_line=False,):
+                        grid_size=4,
+                        debub_emb=False, debug_piece_line=False,
+                        debug_existing_points=False, debug_exact_line=False):
+
+    # 采用骨架细化的方式
+    # mask_map = morphology.skeletonize(mask_map)
+    # mask_map = mask_map.astype(np.uint8)
 
     ys, xs = np.nonzero(mask_map)
     ys, xs = np.flipud(ys), np.flipud(xs)   # 优先将y大的点排在前面
@@ -692,7 +924,9 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
     raw_lines = split_line_points_by_cls(raw_lines, pred_cls_map)
 
     if 0:
-        raw_lines_slim = get_slim_lines(raw_lines)
+        # np.savez("/home/liyongjing/Egolee/programs/mmdetection3d-liyj/local_files/debug_gbld/data/debug_slim_points_20231117.npy", *raw_lines)
+        # raw_lines_slim = get_slim_lines(raw_lines)
+        # exit(1)
         img_h, img_w = x_map.shape
         for raw_line, raw_line_slim in zip(raw_lines, raw_lines_slim):
             img_line = np.zeros((img_h, img_w), dtype=np.uint8)
@@ -712,6 +946,7 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
 
             plt.subplot(2, 1, 2)
             plt.imshow(img_line_slim)
+            # plt.show(block=True)
             plt.show()
         exit(1)
 
@@ -741,7 +976,11 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
         plt.subplot(2, 1, 2)
         plt.imshow(img_emb)
         plt.title("debub_emb")
-        plt.show()
+        # plt.show()
+        plt.show(block=True)
+        plt.close('all')
+
+        # time.sleep(0.1)
 
     # exit(1)
     # np.save("/home/liyongjing/Downloads/debug/1.npy", raw_lines)
@@ -782,7 +1021,11 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
                                             confidence_map, pred_emb_id,
                                             pred_cls_map, pred_orient_map,
                                             pred_visible_map, pred_hanging_map, pred_covered_map,
-                                            debug_piece_line=debug_piece_line)
+                                            grid_size=grid_size,
+                                            debug_existing_points=debug_existing_points,
+                                            debug_piece_line=debug_piece_line,
+                                            debug_exact_line=debug_exact_line)
+
         if len(all_lines) > 0:
             single_line = all_lines[0]
             if len(single_line) > 0:
@@ -790,7 +1033,10 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
 
             if len(all_lines) > 1:
                 for single_line in all_lines[1:]:
-                    if len(single_line) > 45:
+                    # if len(single_line) > 45:
+                    #     exact_lines.append(single_line)
+
+                    if len(single_line) > 10:
                         exact_lines.append(single_line)
 
     # grid_size = 4
@@ -988,6 +1234,8 @@ class GlasslandBoundaryLine2DDecodeNumpy():
 
         self.debub_emb = False
         self.debug_piece_line = False
+        self.debug_existing_points = False
+        self.debug_exact_line = False
 
         # self.noise_filter = nn.MaxPool2d([3, 1], stride=1, padding=[1, 0])  # 去锯齿
     def get_line_cls(self, exact_curse_lines_multi_cls):
@@ -1194,8 +1442,8 @@ class GlasslandBoundaryLine2DDecodeNumpy():
         # pred_offset_x = pred_offset_x * (self.grid_size - 1)
         # pred_offset_y = pred_offset_y * (self.grid_size - 1)
 
-        pred_offset_x = pred_offset_x.round().astype(np.int).clip(0, self.grid_size - 1)
-        pred_offset_y = pred_offset_y.round().astype(np.int).clip(0, self.grid_size - 1)
+        pred_offset_x = pred_offset_x.round().astype(np.int32).clip(0, self.grid_size - 1)
+        pred_offset_y = pred_offset_y.round().astype(np.int32).clip(0, self.grid_size - 1)
 
         _, h, w = pred_offset_x.shape
         pred_grid_x = np.arange(w).reshape(1, 1, w).repeat(h, axis=1) * self.grid_size
@@ -1222,7 +1470,7 @@ class GlasslandBoundaryLine2DDecodeNumpy():
 
         min_y, max_y = self.line_map_range
 
-        mask = np.zeros_like(pred_confidence, dtype=np.bool)
+        mask = np.zeros_like(pred_confidence, dtype=np.bool8)
         mask[:, min_y:max_y, :] = pred_confidence[:, min_y:max_y, :] > self.confident_t
 
         exact_lines = []
@@ -1234,7 +1482,10 @@ class GlasslandBoundaryLine2DDecodeNumpy():
             _exact_lines = connect_line_points(_mask, _pred_emb, _pred_x,
                                                _pred_y, _pred_confidence, _pred_emb_id,
                                                pred_cls, orient_pred, visible_pred, hanging_pred, covered_pred,
-                                               debub_emb=self.debub_emb, debug_piece_line=self.debug_piece_line)
+                                               grid_size=self.grid_size,
+                                               debub_emb=self.debub_emb, debug_piece_line=self.debug_piece_line,
+                                               debug_existing_points=self.debug_existing_points,
+                                               debug_exact_line=self.debug_exact_line)
 
             exact_lines.append(_exact_lines)
 

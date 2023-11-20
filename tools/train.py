@@ -14,6 +14,11 @@ from mmdet3d.utils import replace_ceph_backend
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
+# 解决RuntimeError: received 0 items of ancdata
+import torch
+torch.multiprocessing.set_sharing_strategy('file_system')
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a 3D detector')
     parser.add_argument('config', help='train config file path')

@@ -8,7 +8,7 @@
 #
 #python tools/train.py $CONFIG_FILE
 #!/usr/bin/bash
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=4
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 ROOT_DIR=${SCRIPT_DIR}/../..
@@ -19,8 +19,8 @@ ROOT_DIR=${SCRIPT_DIR}/../..
 
 # batch_size=12, no crop aug, split line by type, seg_emb=10.0
 #debug_crop
-work_dir=${SCRIPT_DIR}/work_dirs/on_server/gbld_v0.3_20231102_batch_12_with_crop_line_10_emb_weight_split_by_cls_by_visible
-
+#work_dir=${SCRIPT_DIR}/work_dirs/on_server/debug_no_spllit/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_stage2
+work_dir=${SCRIPT_DIR}/work_dirs/on_server/gbld_v0.3_20231116_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3
 
 python ${ROOT_DIR}/tools/train.py \
     ${SCRIPT_DIR}/configs/gbld_config_v0.3.py \

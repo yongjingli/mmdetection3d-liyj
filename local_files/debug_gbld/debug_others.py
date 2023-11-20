@@ -421,6 +421,136 @@ def show_img():
     plt.show()
 
 
+def debug_dist_seg_loss():
+    in_tensor = torch.ones((2, 2, 5, 10))
+
+    # dist_weight = torch.ones_like(in_tensor)
+    N, C, H, W = in_tensor.shape
+
+    # min_w = 1
+    # max_w = 5  # 实际的数值为max_w - (max_w - min_w)/H
+    # dist_weight_col = np.arange(min_w, max_w, (max_w - min_w)/H)
+    # dist_weight = np.repeat(dist_weight_col, W).reshape(H, W)
+
+    # torch
+    min_w = 1
+    max_w = 5  # 实际的数值为max_w - (max_w - min_w)/H
+    dist_weight_col = torch.arange(min_w, max_w, (max_w - min_w)/H)
+    dist_weight = dist_weight_col.repeat(1, W).reshape(W, H).transpose(1, 0)
+
+    print(torch.is_tensor(in_tensor))
+    print(torch.is_tensor(dist_weight))
+
+    in_tensor.requires_grad = True
+    print(in_tensor.requires_grad)
+    print(dist_weight.requires_grad)
+
+    in_tensor = in_tensor * dist_weight
+
+    in_tensor_np = in_tensor.detach().numpy()
+    plt.imshow(in_tensor_np[0][1])
+    plt.show()
+
+
+def debug_show_img_quick():
+    import time
+    import matplotlib.pyplot as plt
+
+    num_plots = 100
+    for i in range(num_plots):
+        print(i)
+        # 绘制图像
+        x = [0, 1]
+        y = [0, 1]
+        plt.plot(x, y)
+
+        # 显示图像
+        plt.show()
+        time.sleep(1)
+        plt.close('all')
+
+def debug_sort_points():
+    def sort_point_by_x_y(image_xs, image_ys):
+        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从大到小进行排序
+        sorted_indices = np.lexsort((image_ys, image_xs))
+        return sorted_indices
+
+    def sort_point_by_x_inverse_y(image_xs, image_ys):
+        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从大到小进行排序
+        sorted_indices = np.lexsort((-image_ys, image_xs))
+        return sorted_indices
+
+    def sort_point_by_x_y(image_xs, image_ys):
+        indexs = image_xs.argsort()
+        image_xs_sort = image_xs[indexs]
+        image_ys_sort = image_ys[indexs]
+
+        # 将第一个点加入
+        x_same = image_xs_sort[0]              # 判断是否为同一个x
+        y_pre = image_ys_sort[0]               # 上一个不是同一个相同x的点的y
+
+        indexs_with_same_x = [indexs[0]]       # 记录相同的x的index
+        ys_with_same_x = [image_ys_sort[0]]    # 记录具有相同x的ys
+
+        new_indexs = []
+        for i, (idx, x_s, y_s) in enumerate(zip(indexs[1:], image_xs_sort[1:], image_ys_sort[1:])):
+            if x_s == x_same:
+                indexs_with_same_x.append(idx)
+                ys_with_same_x.append(y_s)
+            else:
+                # 如果当前xs与前面的不一样，将前面的进行截断统计分析
+                # 对y进行排序， 需要判断y是从大到小还是从小到大排序, 需要跟上一个x对应的y来判断，距离近的排在前面
+                # 首先按照从小到大排序
+                index_y_with_same_x = np.array(ys_with_same_x).argsort()
+
+                # 判断是否需要倒转过来排序
+                if len(index_y_with_same_x) > 1:
+                    if abs(index_y_with_same_x[-1] - y_pre) < abs(index_y_with_same_x[0] - y_pre):
+                        index_y_with_same_x = index_y_with_same_x[::-1]
+
+                new_indexs = new_indexs + np.array(indexs_with_same_x)[index_y_with_same_x].tolist()
+
+                # 为下次的判断作准备
+                y_pre = ys_with_same_x[index_y_with_same_x[-1]]
+                x_same = x_s
+                indexs_with_same_x = [idx]
+                ys_with_same_x = [y_s]
+
+            if i == len(image_xs) - 2:    # 判断是否为最后一个点
+                index_y_with_same_x = np.array(ys_with_same_x).argsort()
+                if len(index_y_with_same_x) > 1:
+                    if abs(index_y_with_same_x[-1] - y_pre) < abs(index_y_with_same_x[0] - y_pre):
+                        index_y_with_same_x = index_y_with_same_x[::-1]
+                new_indexs = new_indexs + np.array(indexs_with_same_x)[index_y_with_same_x].tolist()
+        return new_indexs
+
+    def sort_point_by_x_y2(image_xs, image_ys):
+        indexs = image_xs.argsort()
+        # image_xs_sort = image_xs[indexs]
+        image_ys_sort = image_ys[indexs]
+
+        # 判断线的方向主体方向
+        y_direct = image_ys_sort[0] - image_ys_sort[-1]
+        if y_direct < 0:
+            # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从大到小进行排序
+            sorted_indices = np.lexsort((image_ys, image_xs))
+        else:
+            # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从大到小进行排序
+            sorted_indices = np.lexsort((-image_ys, image_xs))
+        return sorted_indices
+
+
+    x = np.array([2, 2, 2, 4, 4,  1])
+    y = np.array([3, 2, 1, 3, 4, 1])
+    indices2 = sort_point_by_x_inverse_y(x, y)
+    print("indices2", indices2)
+
+    new_indexs = sort_point_by_x_y(x, y)
+    print(new_indexs)
+    print(x[new_indexs])
+    print(y[new_indexs])
+
+
 if __name__ == "__main__":
     print("Start")
     # test_mmdet_fpn()
@@ -445,6 +575,14 @@ if __name__ == "__main__":
 
     # show_line_heatmap()
 
-    show_img()
+    # show_img()
+
+    # 加强近处的seg losss
+    # debug_dist_seg_loss()
+
+    # 在循环中快速显示图像
+    # debug_show_img_quick()
+
+    debug_sort_points()
 
     print("End")

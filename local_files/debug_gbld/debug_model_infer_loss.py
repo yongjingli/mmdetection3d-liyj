@@ -504,7 +504,7 @@ def debug_model_infer_loss(config_path, checkpoint_path):
     # test_root = "/data-hdd/liyj/data/label_data/20230926/dataset_28/images"
     # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20230927_mmdet3d/train"
     # test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231013_mmdet3d/train"
-    test_root = "/home/dell/liyongjing/dataset/glass_lane/glass_edge_overfit_20231017_mmdet3d_debug/train"
+    test_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231108_mmdet3d_spline_by_cls/train"
 
     image_root = os.path.join(test_root, "images")
     json_root = os.path.join(test_root, "jsons")
@@ -543,7 +543,7 @@ def debug_model_infer_loss(config_path, checkpoint_path):
         # img_name = "dff47067-ede3-4ac0-b903-ef04df89a291_front_camera_3531.jpg"
         # img_name = "1696991348.057879.jpg"
         # img_name = "1696991348.45783.jpg"
-        img_name = "1696991118.675607.jpg"
+        # img_name = "1696991118.675607.jpg"
         print(img_name)
         count = count + 1
         if count % jump != 0:
@@ -764,8 +764,12 @@ if __name__ == '__main__':
     # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/gbld_debug_config_no_dcn_datasetv2.py"
     # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/epoch_250.pth"
 
-    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/gbld_config_v0.3.py"
-    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/epoch_250.pth"
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/epoch_250.pth"
+
+    # 20231108
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/gbld_config_v0.3.py"
+    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/epoch_200.pth"
 
 
     print("config_path:", config_path)

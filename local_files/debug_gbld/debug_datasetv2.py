@@ -521,7 +521,8 @@ def debug_dataset(cfg):
 
 if __name__ == '__main__':
     # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn.py"
-    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_config_v0.3.py"
+    # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_config_v0.3.py"
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/configs/gbld_config_v0.3.py"
 
     # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
 
