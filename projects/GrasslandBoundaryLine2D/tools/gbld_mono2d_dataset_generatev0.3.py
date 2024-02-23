@@ -436,12 +436,14 @@ def generate_mmdet3d_trainval_infos(generate_dataset_infos):
 
 
 def combine_images_jsons():
-    root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2/download/2023_11_16"
+    root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231202_v0.3/download/2024_01_02"
     # 20231025
     # 16  17  22  23  24  25  26 27 28
     sub_dirs = ["16",  "17",  "22",  "23",  "24",  "25",
                 "26", "27",  "28",  "29",  "32",  "33", "34", "35",
-                "36", "37", "39", "40", "44", "45"]
+                "36", "37", "39", "40", "44", "45", "47", "51", "54", "58",
+                 "61", "64", "65", "69", "75", '76', '77', '78', '79',
+                '82', '86', '88', '89', '90', '91', '92', '95', '96',]
 
     dst_dir = "all"
     dst_root = os.path.join(root, dst_dir)
@@ -477,16 +479,19 @@ def debug_parse_dataset_json(generate_dataset_infos):
         shutil.rmtree(dst_root)
     os.mkdir(dst_root)
 
+    down_scale = 6
+
     img_names = [name for name in os.listdir(img_root) if name[-4:] in [".jpg", '.png']]
     for img_name in tqdm(img_names, desc="img_names"):
         # img_name = "1696991193.66982.jpg"
         # img_name = "1689848745238965269.jpg"
-        # img_name = "1695030147300217849.jpg"
+        img_name = "1700108695.418044.jpg"
         print("img_name:", img_name)
         img_path = os.path.join(img_root, img_name)
         json_path = os.path.join(label_root, img_name[:-4] + ".json")
 
         img = cv2.imread(img_path)
+        # img = np.ones_like(img) * 255
 
         with open(json_path, "r") as fp:
             labels = json.load(fp)
@@ -519,11 +524,17 @@ def debug_parse_dataset_json(generate_dataset_infos):
             all_points_covered.append(points_covered)
 
         # img_line = np.ones_like(img) * 255
-        img_line = copy.deepcopy(img)
-        img_cls = np.ones_like(img) * 255
-        img_vis = np.ones_like(img) * 255
-        img_hang = np.ones_like(img) * 255
-        img_covered = np.ones_like(img) * 255
+        img_h, img_w, img_c = img.shape
+        img_h, img_w = img_h//down_scale, img_w//down_scale
+        img = cv2.resize(img,(img_w, img_h))
+
+        img_line = np.ones((img_h, img_w, img_c), dtype=np.uint8) * 255
+        # img_line = copy.deepcopy(img)
+
+        img_cls = np.ones_like(img_line) * 255
+        img_vis = np.ones_like(img_line) * 255
+        img_hang = np.ones_like(img_line) * 255
+        img_covered = np.ones_like(img_line) * 255
 
         line_count = 0
 
@@ -539,6 +550,9 @@ def debug_parse_dataset_json(generate_dataset_infos):
             for i, cur_point in enumerate(points[1:]):
                 x1, y1 = int(pre_point[0]), int(pre_point[1])
                 x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                x1, y1 = x1//down_scale, y1//down_scale
+                x2, y2 = x2//down_scale, y2//down_scale
 
                 cv2.circle(img, (x1, y1), 1, color, 1)
                 cv2.line(img, (x1, y1), (x2, y2), color, 3)
@@ -565,6 +579,9 @@ def debug_parse_dataset_json(generate_dataset_infos):
                 color = color_list[line_count % len(color_list)]
                 x1, y1 = int(pre_point[0]), int(pre_point[1])
                 x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                x1, y1 = x1 // down_scale, y1 // down_scale
+                x2, y2 = x2 // down_scale, y2 // down_scale
 
                 cv2.circle(img_line, (x1, y1), 1, color, 1)
                 cv2.line(img_line, (x1, y1), (x2, y2), color, 3)
@@ -615,23 +632,23 @@ def debug_parse_dataset_json(generate_dataset_infos):
         s_img_path = os.path.join(dst_root, img_name)
         cv2.imwrite(s_img_path, img_line)
 
-        # plt.imshow(img[:, :, ::-1])
-        # plt.show()
-        #
-        # plt.subplot(2, 2, 1)
-        # plt.imshow(img_line[:, :, ::-1])
-        #
-        # plt.subplot(2, 2, 2)
-        # plt.imshow(img_cls[:, :, ::-1])
-        #
-        # plt.subplot(2, 2, 3)
-        # plt.imshow(img_vis[:, :, ::-1])
-        #
-        # plt.subplot(2, 2, 4)
-        # # plt.imshow(img_hang[:, :, ::-1])
-        # plt.imshow(img_covered[:, :, ::-1])
-        # plt.show()
-        # exit(1)
+        plt.imshow(img[:, :, ::-1])
+        plt.show()
+
+        plt.subplot(2, 2, 1)
+        plt.imshow(img_line[:, :, ::-1])
+
+        plt.subplot(2, 2, 2)
+        plt.imshow(img_cls[:, :, ::-1])
+
+        plt.subplot(2, 2, 3)
+        plt.imshow(img_vis[:, :, ::-1])
+
+        plt.subplot(2, 2, 4)
+        # plt.imshow(img_hang[:, :, ::-1])
+        plt.imshow(img_covered[:, :, ::-1])
+        plt.show()
+        exit(1)
 
 
 def get_test_names(test_info_path):
@@ -647,7 +664,7 @@ def get_test_names(test_info_path):
 
 
 def filter_images_labels():
-    root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2/download/2023_11_10/37_part"
+    root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231202_v0.3/download/2023_12_02/58_part"
     dst_img_root = os.path.join(root, "images_filter")
     dst_json_root = os.path.join(root, "json_filter")
 
@@ -677,6 +694,9 @@ def filter_images_labels():
         shutil.copy(img_path, dst_img_path)
         shutil.copy(json_path, dst_json_path)
 
+def unzip_files():
+    root = "/home/liyongjing/Downloads/tmp"
+    file_name = [""]
 
 
 
@@ -732,13 +752,17 @@ if __name__ == "__main__":
         # debug
         #  20231023
         # "src_root": "/home/liyongjing/Egolee/hdd-data/data/label_datas/debug_unvisiable_data",
-        "src_root": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231101_v0.2",
+        "src_root": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231202_v0.3",
         #  如果是None则随机产生测试集,如果提供则采用提供的信息作为测试集
         "test_info_path": "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231020_v0.2/gbld_infos_test_20231024.pkl",
-        "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231116_mmdet3d_spline_by_cls",
-        # "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231113_mmdet3d",
+        "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20240102_mmdet3d_spline_by_cls",
+
+        # overfit
+        # "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231116_mmdet3d_spline_by_cls_overfit",
+        # "dst_root": "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/debug_overfit_gbld_detr",
 
     }
+
 
     # 将文件整理到一个文件夹中
     # combine_images_jsons()
@@ -754,5 +778,3 @@ if __name__ == "__main__":
 
     # 生成mmdet3d数据加载的相关信息
     # generate_mmdet3d_trainval_infos(generate_dataset_infos)
-
-

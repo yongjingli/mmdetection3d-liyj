@@ -12,5 +12,6 @@ cd ../
 # tpvformer
 CHECKPOINT_PATH="./checkpoints/tpvformer/tpvformer_8xb1-2x_nus-seg_20230411_150639-bd3844e2.pth"
 python tools/test.py ./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py  $CHECKPOINT_PATH
+
 # multi-gpu testing
 #bash tools/dist_test.sh ./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py  $CHECKPOINT_PATH 1

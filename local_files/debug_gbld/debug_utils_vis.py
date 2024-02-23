@@ -133,9 +133,9 @@ def draw_gbld_pred(img_show, single_stage_result, colors=None):
             thickness = 3
             cv2.line(img_show, (x1, y1), (x2, y2), color, thickness, 8)
             line_orient = cal_points_orient(pre_point, cur_point)
-
-            if point_visible != -1 and point_visible < 0.2:
-                cv2.circle(img_show, (x2, y2), thickness * 2, (0, 0, 0), thickness=2)
+            if -1 not in [point_visible, point_covered]:
+                if point_visible < 0.2 and point_covered < 0.2:
+                    cv2.circle(img_show, (x2, y2), thickness * 2, (0, 0, 0), thickness=2)
 
             if i % 50 == 0:
                 if len(pre_point) > 5:

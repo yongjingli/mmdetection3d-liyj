@@ -38,14 +38,11 @@ from copy import deepcopy
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from mmengine.dataset import Compose, pseudo_collate
-from debug_utils import (decode_gt_lines, cal_points_orient, draw_orient,
-                         filter_near_same_points, parse_ann_info, parse_ann_infov2,
-                         discriminative_cluster_postprocess)
+# from debug_utils import (decode_gt_lines, cal_points_orient, draw_orient,
+#                          filter_near_same_points, parse_ann_info, parse_ann_infov2,
+#                          discriminative_cluster_postprocess)
 
-
-color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
-              (230, 216, 173), (128, 0, 128), (203, 192, 255), (238, 130, 238), (130, 0, 75),
-              (169, 169, 169), (0, 69, 255)]  # [纯红、纯绿、纯蓝、金色、纯黄、天蓝、紫色、粉色、紫罗兰、藏青色、深灰色、橙红色]
+from vis_utils import color_list, draw_line, draw_bbox
 
 
 def parse_args():
@@ -357,6 +354,7 @@ def debug_model_infer(cfg, args):
         # loss
         # loss = model(data_batch["inputs"], data_batch["data_samples"], mode="loss")
 
+
         # predict
         results = model(data_batch["inputs"], data_batch["data_samples"], mode="predict")
 
@@ -369,50 +367,73 @@ def debug_model_infer(cfg, args):
             std = np.array([1.0, 1.0, 1.0, ])
 
             img = img * std + mean
-            img = img.astype(np.uint8)
+            img = img.astype(np.uint8).copy()
 
-            stages_result = result.pred_instances.stages_result[0]
+            pred_instances = result.pred_instances
+            bboxes = pred_instances.bboxes.detach().cpu().numpy()
+            labels = pred_instances.labels.detach().cpu().numpy()
+            scores = pred_instances.scores.detach().cpu().numpy()
+            pts = pred_instances.pts.detach().cpu().numpy()
 
-            meta_info = result.metainfo
-            batch_input_shape = meta_info["batch_input_shape"]
+            seg = pred_instances.seg[0].detach().cpu().numpy()[0]
+            plt.imshow(seg)
+            plt.show()
+            # print(labels)
 
-            gt_line_map = np.zeros(batch_input_shape, dtype=np.uint8)
+            for bbox, label, score, pt in zip(bboxes, labels, scores, pts):
+                if score > 0.4:
+                    # print(label)
+                    x1, y1, x2, y2 = [int(d) for d in bbox[:4]]
+                    color = color_list[int(label)]
+                    print(label)
+                    cv2.rectangle(img, (x1, y1), (x2, y2), color, 1)
 
-            gt_lines = meta_info["gt_lines"]
-            # gt_lines = meta_info["eval_gt_lines"]
-            for gt_line in gt_lines:
-                gt_label = gt_line["label"]
-                points = gt_line["points"]
-                category_id = gt_line["category_id"]
+                    img = draw_line(img, pt, color_list[int(label)])
 
-                pre_point = points[0]
-                for cur_point in points[1:]:
-                    x1, y1 = int(pre_point[0]), int(pre_point[1])
-                    x2, y2 = int(cur_point[0]), int(cur_point[1])
 
-                    thickness = 3
-                    cv2.line(gt_line_map, (x1, y1), (x2, y2), (1), thickness, 8)
-                    pre_point = cur_point
+                # cv2.rectangle(img, (y1, x1), (y2, x2), (255, 0, 0), 1)
 
-            pred_line_map = np.zeros(batch_input_shape, dtype=np.uint8)
-            single_stage_result = stages_result[0]
-            for curve_line in single_stage_result:
-                curve_line = np.array(curve_line)
-                pre_point = curve_line[0]
-                for cur_point in curve_line[1:]:
-                    x1, y1 = int(pre_point[0]), int(pre_point[1])
-                    x2, y2 = int(cur_point[0]), int(cur_point[1])
-
-                    thickness = 3
-                    cv2.line(pred_line_map, (x1, y1), (x2, y2), (1), thickness, 8)
-                    pre_point = cur_point
-
-            plt.subplot(3, 1, 1)
-            plt.imshow(gt_line_map)
-            plt.subplot(3, 1, 2)
-            plt.imshow(pred_line_map)
-
-            plt.subplot(3, 1, 3)
+            # meta_info = result.metainfo
+            # batch_input_shape = meta_info["batch_input_shape"]
+            #
+            # gt_line_map = np.zeros(batch_input_shape, dtype=np.uint8)
+            #
+            # gt_lines = meta_info["gt_lines"]
+            # # gt_lines = meta_info["eval_gt_lines"]
+            # for gt_line in gt_lines:
+            #     gt_label = gt_line["label"]
+            #     points = gt_line["points"]
+            #     category_id = gt_line["category_id"]
+            #
+            #     pre_point = points[0]
+            #     for cur_point in points[1:]:
+            #         x1, y1 = int(pre_point[0]), int(pre_point[1])
+            #         x2, y2 = int(cur_point[0]), int(cur_point[1])
+            #
+            #         thickness = 3
+            #         cv2.line(gt_line_map, (x1, y1), (x2, y2), (1), thickness, 8)
+            #         pre_point = cur_point
+            #
+            # pred_line_map = np.zeros(batch_input_shape, dtype=np.uint8)
+            # single_stage_result = stages_result[0]
+            # for curve_line in single_stage_result:
+            #     curve_line = np.array(curve_line)
+            #     pre_point = curve_line[0]
+            #     for cur_point in curve_line[1:]:
+            #         x1, y1 = int(pre_point[0]), int(pre_point[1])
+            #         x2, y2 = int(cur_point[0]), int(cur_point[1])
+            #
+            #         thickness = 3
+            #         cv2.line(pred_line_map, (x1, y1), (x2, y2), (1), thickness, 8)
+            #         pre_point = cur_point
+            #
+            # plt.subplot(3, 1, 1)
+            # plt.imshow(gt_line_map)
+            # plt.subplot(3, 1, 2)
+            # plt.imshow(pred_line_map)
+            #
+            # plt.subplot(3, 1, 3)
+            # plt.imshow(img[:, :, ::-1])
             plt.imshow(img[:, :, ::-1])
             plt.show()
             exit(1)
@@ -742,76 +763,17 @@ def debug_model_infer_loss(config_path, checkpoint_path):
 
 
 if __name__ == '__main__':
-    # 用来查看model预测结果的正确性
-    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/gbld_debug_config_no_dcn_v0.2.py"
-    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/epoch_250.pth"
-
-    # 服务器
-    # root = "/data-hdd/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop"
-
-    # 本地
-    # root = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop_batch_12"
-    # config_path = root + "/gbld_debug_config_no_dcn_v0.2.py"
-    # checkpoint_path = root + "/epoch_250.pth"
-
-    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/gbld_debug_config_no_dcn_v0.2.py"
-    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20230927_v0.2_fit_line_crop/epoch_250.pth"
-
-    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/gbld_debug_config_no_dcn_v0.2_1013.py"
-    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_overfit_20231013_v0.2_fit_line_crop_batch_6/epoch_250.pth"
-
-    # 调试遮挡情况
-    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/gbld_debug_config_no_dcn_datasetv2.py"
-    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered/epoch_250.pth"
-
-    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered2/gbld_debug_config_no_dcn_datasetv2.py"
-    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered2/epoch_250.pth"
-
-    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered3/gbld_debug_config_no_dcn_datasetv2.py"
-    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered3/epoch_250.pth"
-
-    # config_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/gbld_debug_config_no_dcn_datasetv2.py"
-    # checkpoint_path = "/home/dell/liyongjing/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_visible_hanging_covered5/epoch_250.pth"
-
-    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/gbld_config_v0.3.py"
-    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231023_2/epoch_250.pth"
-
-    # 20231108
-    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/gbld_config_v0.3.py"
-    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/epoch_200.pth"
-
-    # 20231121
-    # 特征维度为1
-    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit2/gbld_config_v0.4_overfit.py"
-    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit2/epoch_250.pth"
-
-    # 特征维度为4
-    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit4/gbld_config_v0.4_overfit.py"
-    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit4/epoch_200.pth"
-
-    # 特征维度为8
-    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit8/gbld_config_v0.4_overfit.py"
-    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit8/epoch_250.pth"
-
-    # 特征维度为16
-    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit16/gbld_config_v0.4_overfit.py"
-    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit16/epoch_250.pth"
-
-    # 特征维度为32
-    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit8/gbld_config_v0.4_overfit.py"
-    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit8/epoch_250.pth"
-
     # 作为辅助任务
-    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit_discrimate_aux/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit_aux128/gbld_config_v0.4_overfit.py"
-    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit_discrimate_aux/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit_aux128/epoch_250.pth"
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D_DETR/work_dirs/gbld_overfit_detr_20231227_0/gbld_deter_config_overfit.py"
+    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D_DETR/work_dirs/gbld_overfit_detr_20231227_0/epoch_10000.pth"
 
     print("config_path:", config_path)
     # 对比gt和pred的区别
-    # main(config_path, checkpoint_path)
+    main(config_path, checkpoint_path)
 
     # 用来可视化预测的结果, heatmap, 输入形式为图片
     # debug_model_infer_heatmap(config_path, checkpoint_path)
 
     # 用来查看sample的loss情况, 输入形式包括图片和json
-    debug_model_infer_loss(config_path, checkpoint_path)
+    # debug_model_infer_loss(config_path, checkpoint_path)
     print("end")

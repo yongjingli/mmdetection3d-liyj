@@ -18,9 +18,9 @@ from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
 
 from mmdet3d.utils import replace_ceph_backend
-from debug_utils import cal_points_orient, draw_orient, color_list
-from gbld_mono2d_decode_numpy import GlasslandBoundaryLine2DDecodeNumpy
-from debug_utils import sigmoid, sigmoid_inverse, draw_pred_result_numpy
+# from debug_utils import cal_points_orient, draw_orient
+from vis_utils import color_list, draw_line, draw_bbox
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a 3D detector')
@@ -310,6 +310,7 @@ def debug_dataset(cfg):
         scope_name=default_scope)
 
     from mmengine.registry import MODELS
+    from mmengine.registry import DATASETS
 
     train_dataloader = cfg.get('train_dataloader')
     val_dataloader = cfg.get('val_dataloader')
@@ -329,7 +330,6 @@ def debug_dataset(cfg):
     val_related = [val_dataloader, val_cfg, val_evaluator]
     test_related = [test_dataloader, test_cfg, test_evaluator]
 
-
     data_loader = build_dataloader(train_dataloader)
     dataset = data_loader.dataset
 
@@ -340,13 +340,6 @@ def debug_dataset(cfg):
     model = cfg.get('model')
     data_preprocessor = model.data_preprocessor
     data_preprocessor = MODELS.build(data_preprocessor)
-
-    grid_size = 4/model.bbox_head.up_scale
-    glass_land_boundary_line_2d_decode_numpy = GlasslandBoundaryLine2DDecodeNumpy(confident_t=0.2, grid_size=grid_size)
-    glass_land_boundary_line_2d_decode_numpy.debub_emb = 0
-    glass_land_boundary_line_2d_decode_numpy.debug_existing_points = 0
-    glass_land_boundary_line_2d_decode_numpy.debug_piece_line = 0
-    glass_land_boundary_line_2d_decode_numpy.debug_exact_line = 0
 
     if 0:
         # 进行data_loader的debug,不好调试,需要加载的数据太多,debug的数据半天不出来
@@ -374,6 +367,9 @@ def debug_dataset(cfg):
             print(len(data_batch["data_samples"][1].gt_instances.gt_line_maps_stages))
             print(data_batch["data_samples"][1].gt_instances.gt_line_maps_stages[0]["orient_map_mask"].shape)
 
+            print(len(data_batch["data_samples"][1].gt_instances.gt_line_instances_stages))
+            print(len(data_batch["data_samples"][1].gt_instances.gt_line_labels_stages))
+            print(data_batch["data_samples"][1].gt_instances.gt_line_labels_stages[0])
             exit(1)
 
     print("metainfo:", dataset.metainfo)
@@ -397,35 +393,32 @@ def debug_dataset(cfg):
         img = img.astype(np.uint8)
         img_show = img.copy()
 
-
         gt_lines = data['data_samples'].gt_lines
-        for line_id, gt_line in enumerate(gt_lines):
+        for gt_line in gt_lines:
             gt_label = gt_line["label"]
             points = gt_line["points"]
             category_id = gt_line["category_id"]
-
-            color = color_list[line_id]
 
             pre_point = points[0]
             for i, cur_point in enumerate(points[1:]):
                 x1, y1 = int(pre_point[0]), int(pre_point[1])
                 x2, y2 = int(cur_point[0]), int(cur_point[1])
 
-                # thickness = 1
-                thickness = 3
+                thickness = 1
+                # thickness = 3
                 # cv2.line是具有一定宽度的直线,如何获取密集的orients?应该也构建自身的mask?
-                cv2.line(img_show, (x1, y1), (x2, y2), (255, 0, 0), thickness, 8)
+                # cv2.line(img_show, (x1, y1), (x2, y2), (255, 0, 0), thickness, 8)
 
                 # 求每个点的方向
-                if i % 100 == 0:
-                    orient = cal_points_orient(pre_point, cur_point)
+                # if i % 100 == 0:
+                #     orient = cal_points_orient(pre_point, cur_point)
 
                     # 转个90度,指向草地
                     # orient = orient + 90
                     # if orient > 360:
                     #     orient = orient - 360
 
-                    img_show = draw_orient(img_show, pre_point, orient, arrow_len=15, color=color)
+                    # img_show = draw_orient(img_show, pre_point, orient, arrow_len=15)
 
                 pre_point = cur_point
                 # print(orient)
@@ -434,203 +427,130 @@ def debug_dataset(cfg):
 
         # debug_train_gt
         if 1:
+            if 0:
+                gt_line_maps_stages = data["data_samples"].gt_instances.gt_line_maps_stages
+                # 可视化不同stage的map结果
+                for gt_line_maps in gt_line_maps_stages:
+                    gt_confidence = gt_line_maps["gt_confidence"]
+                    gt_offset_x = gt_line_maps["gt_offset_x"]
+                    gt_offset_y = gt_line_maps["gt_offset_y"]
+                    gt_line_index = gt_line_maps["gt_line_index"]
+                    ignore_mask = gt_line_maps["ignore_mask"]
+                    foreground_mask = gt_line_maps["foreground_mask"]
+                    gt_line_id = gt_line_maps["gt_line_id"]
+                    gt_line_cls = gt_line_maps["gt_line_cls"]
+                    foreground_expand_mask = gt_line_maps["foreground_expand_mask"]
+                    orient_map_mask = gt_line_maps["orient_map_mask"]
+                    orient_map_sin = gt_line_maps["orient_map_sin"]
+                    orient_map_cos = gt_line_maps["orient_map_cos"]
 
-            gt_line_maps_stages = data["data_samples"].gt_instances.gt_line_maps_stages
-            # 可视化不同stage的结果
-            for i, gt_line_maps in enumerate(gt_line_maps_stages):
-                gt_confidence = gt_line_maps["gt_confidence"]
-                gt_offset_x = gt_line_maps["gt_offset_x"]
-                gt_offset_y = gt_line_maps["gt_offset_y"]
-                gt_line_index = gt_line_maps["gt_line_index"]
-                ignore_mask = gt_line_maps["ignore_mask"]
-                foreground_mask = gt_line_maps["foreground_mask"]
-                gt_line_id = gt_line_maps["gt_line_id"]
-                gt_line_cls = gt_line_maps["gt_line_cls"]
-                foreground_expand_mask = gt_line_maps["foreground_expand_mask"]
-                orient_map_mask = gt_line_maps["orient_map_mask"]
-                orient_map_sin = gt_line_maps["orient_map_sin"]
-                orient_map_cos = gt_line_maps["orient_map_cos"]
-
-                if "gt_confidence_visible" in gt_line_maps:
                     gt_confidence_visible = gt_line_maps["gt_confidence_visible"]
-                else:
-                    gt_confidence_visible = None
-
-                if "gt_confidence_hanging" in gt_line_maps:
                     gt_confidence_hanging = gt_line_maps["gt_confidence_hanging"]
-                else:
-                    gt_confidence_hanging = None
-
-                if "gt_confidence_covered" in gt_line_maps:
                     gt_confidence_covered = gt_line_maps["gt_confidence_covered"]
-                else:
-                    gt_confidence_covered = None
 
-                if "point_map_mask" in gt_line_maps:
-                    point_map_mask = gt_line_maps["point_map_mask"]
-                else:
-                    point_map_mask = None
+                    gt_confidence = gt_confidence.cpu().detach().numpy()
+                    gt_offset_x = gt_offset_x.cpu().detach().numpy()
+                    gt_offset_y = gt_offset_y.cpu().detach().numpy()
+                    gt_line_index = gt_line_index.cpu().detach().numpy()
+                    ignore_mask = ignore_mask.cpu().detach().numpy()
+                    foreground_mask = foreground_mask.cpu().detach().numpy()
+                    gt_line_id = gt_line_id.cpu().detach().numpy()
+                    gt_line_cls = gt_line_cls.cpu().detach().numpy()
+                    foreground_expand_mask = foreground_expand_mask.cpu().detach().numpy()
 
-                if "point_map_confidence" in gt_line_maps:
-                    point_map_confidence = gt_line_maps["point_map_confidence"]
-                else:
-                    point_map_confidence = None
+                    orient_map_mask = orient_map_mask.cpu().detach().numpy()
+                    orient_map_sin = orient_map_sin.cpu().detach().numpy()
+                    orient_map_cos = orient_map_cos.cpu().detach().numpy()
 
-                if "point_map_index" in gt_line_maps:
-                    point_map_index = gt_line_maps["point_map_index"]
-                else:
-                    point_map_index = None
-
-                gt_confidence = gt_confidence.cpu().detach().numpy()
-                gt_offset_x = gt_offset_x.cpu().detach().numpy()
-                gt_offset_y = gt_offset_y.cpu().detach().numpy()
-                gt_line_index = gt_line_index.cpu().detach().numpy()
-                ignore_mask = ignore_mask.cpu().detach().numpy()
-                foreground_mask = foreground_mask.cpu().detach().numpy()
-                gt_line_id = gt_line_id.cpu().detach().numpy()
-                gt_line_cls = gt_line_cls.cpu().detach().numpy()
-                foreground_expand_mask = foreground_expand_mask.cpu().detach().numpy()
-
-                orient_map_mask = orient_map_mask.cpu().detach().numpy()
-                orient_map_sin = orient_map_sin.cpu().detach().numpy()
-                orient_map_cos = orient_map_cos.cpu().detach().numpy()
-
-                if gt_confidence_visible is not None:
                     gt_confidence_visible = gt_confidence_visible.cpu().detach().numpy()
-
-                if gt_confidence_hanging is not None:
                     gt_confidence_hanging = gt_confidence_hanging.cpu().detach().numpy()
-
-                if gt_confidence_covered is not None:
                     gt_confidence_covered = gt_confidence_covered.cpu().detach().numpy()
 
-                if point_map_mask is not None:
-                    point_map_mask = point_map_mask.cpu().detach().numpy()
+                    # 将orient转回到角度表示
+                    # orients = np.arctan2(orient_map_sin, orient_map_cos) / np.pi * 180
+                    # 转回到MEBOW的表示
+                    # if 180 >= orient >= 0:
+                    #     orient = 90 + (180 - orient)
+                    # elif orient >= -90:
+                    #     orient = 270 + abs(orient)
+                    # elif orient >= -180:
+                    #     orient = abs(orient) - 90
+                    # else:
+                    #     orient = None
 
-                if point_map_confidence is not None:
-                    point_map_confidence = point_map_confidence.cpu().detach().numpy()
+                    plt.subplot(3, 3, 1)
+                    plt.imshow(gt_confidence[0])
 
-                if point_map_index is not None:
-                    point_map_index = point_map_index.cpu().detach().numpy()
+                    plt.subplot(3, 3, 2)
+                    plt.imshow(foreground_mask[0])
 
-                if 0:
-                    # 可视化线段的端点预测
-                    plt.subplot(3, 1, 1)
-                    plt.title("point_map_mask")
-                    plt.imshow(point_map_mask[0])
+                    plt.subplot(3, 3, 3)
+                    plt.imshow(gt_line_index[0])
 
-                    plt.subplot(3, 1, 2)
-                    plt.title("point_map_confidence")
-                    plt.imshow(point_map_confidence[0])
+                    plt.subplot(3, 3, 4)
+                    plt.imshow(orient_map_mask[0])
 
-                    plt.subplot(3, 1, 3)
-                    plt.title("point_map_index")
-                    plt.imshow(point_map_index[0])
+                    plt.subplot(3, 3, 5)
+                    plt.imshow(img_show[:, :, ::-1])
+
+                    # classes = [
+                    #     'road_boundary_line',
+                    #     'bushes_boundary_line',
+                    #     'fence_boundary_line',
+                    #     'stone_boundary_line',
+                    #     'wall_boundary_line',
+                    #     'water_boundary_line',
+                    #     'snow_boundary_line',
+                    #     'manhole_boundary_line',
+                    #     'others_boundary_line',
+                    # ]
+
+                    plt.subplot(3, 3, 6)
+                    plt.imshow(gt_line_cls[1])    # index代表不同类别的heatmap
+
+                    plt.subplot(3, 3, 7)
+                    plt.imshow(gt_confidence_visible[0])
+
+                    plt.subplot(3, 3, 8)
+                    plt.imshow(gt_confidence_hanging[0])
+
+                    plt.subplot(3, 3, 9)
+                    plt.imshow(gt_confidence_covered[0])
                     plt.show()
+                    exit(1)
 
-                # 将gt-map解析为预测结果
-                if 1:
-                    # if i != 2:
-                    #     continue
-                    img_show2 = img.copy()
+            if 1:
+                gt_line_instances_stages = data["data_samples"].gt_instances.gt_line_instances_stages
+                gt_line_labels_stages = data["data_samples"].gt_instances.gt_line_labels_stages
 
-                    heatmap_map_seg = gt_confidence
-                    heatmap_map_offset = np.concatenate([gt_offset_x, gt_offset_y], axis=0)
-                    heatmap_map_seg_emb = gt_line_index
-                    heatmap_map_connect_emb = gt_line_id
-                    heatmap_map_cls = gt_line_cls
-                    heatmap_map_orient = np.concatenate([orient_map_sin, orient_map_cos], axis=0)
-                    heatmap_map_visible = gt_confidence_visible
-                    heatmap_map_hanging = gt_confidence_hanging
-                    heatmap_map_covered = gt_confidence_covered
+                # 在不同的stage中，gt_line_instances和gt_line_labels一样
+                gt_line_instances = gt_line_instances_stages[0]
+                gt_line_labels = gt_line_labels_stages[0]
 
-                    # 需要进行sigmoid操作的特征图
-                    heatmap_map_seg = sigmoid_inverse(heatmap_map_seg)
-                    heatmap_map_offset = sigmoid_inverse(heatmap_map_offset)
-                    heatmap_map_cls = sigmoid_inverse(heatmap_map_cls)
+                gt_lines_shift_fixed_pts = gt_line_instances.shift_fixed_num_sampled_points_v2
+                for i, gt_line_shift_fixed_pts in enumerate(gt_lines_shift_fixed_pts):
+                    gt_line_fixed_pts = gt_line_shift_fixed_pts[1]    # 对于曲线，共有两种shift pts, 选择0或者1
+                    img_show = draw_line(img_show, gt_line_fixed_pts, color_list[i])
 
-                    # gt_confidence_visible，gt_confidence_hanging，gt_confidence_covered
-                    if heatmap_map_visible is not None:
-                        heatmap_map_visible = sigmoid_inverse(heatmap_map_visible)
+                gt_lines_bboxes = gt_line_instances.bbox
+                for j, gt_lines_bbox in enumerate(gt_lines_bboxes):
+                    x1, y1, x2, y2 = gt_lines_bbox
+                    bbox = [x1, y1, x2, y2]
+                    img_show = draw_bbox(img_show, bbox, color_list[j], thickness=1)
 
-                    if heatmap_map_hanging is not None:
-                        heatmap_map_hanging = sigmoid_inverse(heatmap_map_hanging)
-
-                    if heatmap_map_covered is not None:
-                        heatmap_map_covered = sigmoid_inverse(heatmap_map_covered)
-
-                    # 对于orient则需要sigmoid(orient_pred) * 2 - 1, 其逆操作如下
-                    heatmap_map_orient = 1 + sigmoid_inverse(heatmap_map_orient)/2
-
-                    glass_land_boundary_line_2d_decode_numpy.grid_size = model.bbox_head.strides[i]/model.bbox_head.up_scale
-                    print(model.bbox_head.strides[i])
-                    curse_lines_with_cls = glass_land_boundary_line_2d_decode_numpy.forward(heatmap_map_seg,
-                                                                                            heatmap_map_offset,
-                                                                                            heatmap_map_seg_emb,
-                                                                                            heatmap_map_connect_emb,
-                                                                                            heatmap_map_cls,
-                                                                                            orient_pred=heatmap_map_orient,
-                                                                                            visible_pred=heatmap_map_visible,
-                                                                                            hanging_pred=heatmap_map_hanging,
-                                                                                            covered_pred=heatmap_map_covered,)
-
-
-                    # 对其进行可视化
-                    img_show2 = draw_pred_result_numpy(img_show2, curse_lines_with_cls[0])
-
-                # orient_mask = np.bitwise_and(orient_map_sin != 0, orient_map_cos != 0)
-                # orient_mask = orient_mask[0]
-
-                # plt.imshow(orient_mask)
-                # plt.title("orient_mask")
-                # plt.show()
-
-                # 将orient转回到角度表示
-                # orients = np.arctan2(orient_map_sin, orient_map_cos) / np.pi * 180
-                # 转回到MEBOW的表示
-                # if 180 >= orient >= 0:
-                #     orient = 90 + (180 - orient)
-                # elif orient >= -90:
-                #     orient = 270 + abs(orient)
-                # elif orient >= -180:
-                #     orient = abs(orient) - 90
-                # else:
-                #     orient = None
-
-                plt.imshow(img_show[:, :, ::-1])
-                # plt.imshow(img_show2[:, :, ::-1])
+                plt.imshow(img_show[..., ::-1])
                 plt.show()
-                #
-                # plt.subplot(2, 2, 1)
-                # plt.title("gt_confidence")
-                # plt.imshow(gt_confidence[0])
-                #
-                # plt.subplot(2, 2, 2)
-                # plt.title("gt_line_index")
-                # plt.imshow(gt_line_index[0])
-                #
-                # plt.subplot(2, 2, 3)
-                # plt.title("orient_map_mask")
-                # plt.imshow(orient_map_mask[0])
-                #
-                # plt.subplot(2, 2, 4)
-                # plt.title("img_show")
-                # plt.imshow(img_show[:, :, ::-1])
-                # plt.show()
                 exit(1)
-
         exit(1)
 
 
 if __name__ == '__main__':
     # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn.py"
-    # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2.py"
-    # config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_debug_config_no_dcn_v0.2.py"
-    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/configs/gbld_config_v0.4_overfit.py"
+    config_path = "./projects/GrasslandBoundaryLine2D_DETR/configs/gbld_deter_config_overfit.py"
 
-    # config_path = "./projects/TPVFormer/configs/tpvformer_8xb1-2x_nus-seg.py"
+    # cfg = Config.fromfile(args.config)这里进行在自定义模块的导入
+    # 会进入到fromfile模块里进行判断，不要在配置文件里加入
+    # from torch.nn.modules.activation import ReLU这种类型的导入，否则不会导入自定义模块
 
-    # 用于加载数据的测试调试,可用于验证数据加载和数据增强的正确性
-    # debug的时候发现padding的像素在左边,这是由于padding后的flip造成的
     print("config_path:", config_path)
     main(config_path)

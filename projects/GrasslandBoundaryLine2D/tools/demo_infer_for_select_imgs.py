@@ -150,21 +150,45 @@ def main(config_path, checkpoint_path, test_root, b_save_vis=False, s_vis_root=N
                 # plt.show()
                 # exit(1)    # show one image
 
+import argparse
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train a 3D detector')
+    parser.add_argument('--test_root', help='train config file path')
+    parser.add_argument('--s_vis_root', help='the dir to save logs and models')
+    args = parser.parse_args()
+    return args
+
 
 if __name__ == "__main__":
+    args = parse_args()
+
+
     # 进行模型预测, 给出图片的路径, 即可进行模型预测
     print("Start")
     # 20231108
     # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/gbld_config_v0.3.py"
     # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls/epoch_200.pth"
 
-    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231208_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/gbld_config_v0.4_overfit.py"
-    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231208_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/epoch_250.pth"
+    # 20240104
+    # config_path = "/data-ssd2/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/on_labels/gbld_v0.4_20231218_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/data-ssd2/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/on_labels/gbld_v0.4_20231218_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/epoch_250.pth"
 
+    config_path = "/data-ssd2/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/on_server/normal/gbld_v0.4_20240102_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_discrimate_rotate/gbld_config_v0.4_overfit.py"
+    checkpoint_path = "/data-ssd2/liyj/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/on_server/normal/gbld_v0.4_20240102_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_discrimate_rotate/epoch_250.pth"
+
+    print("config_path:", config_path)
+    print("checkpoint_path:", checkpoint_path)
     # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231109/rosbag2_2023_11_08-16_29_19_gongzidaolu/images"
-    test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231217/rosbag2_2023_12_16-16_28_19_dyg/images"
-    s_vis_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231217/rosbag2_2023_12_16-16_28_19_dyg/1"
-    print(test_root)
+    # test_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231217/rosbag2_2023_12_16-16_28_19_dyg/images"
+    # s_vis_root = "/home/liyongjing/Egolee/hdd-data/test_data/20231217/rosbag2_2023_12_16-16_28_19_dyg/1"
+
+    test_root = args.test_root
+    s_vis_root = args.s_vis_root
+    print("test_root:", test_root)
+    print("s_vis_root:", s_vis_root)
 
     main(config_path, checkpoint_path, test_root, b_save_vis=True, s_vis_root=s_vis_root, device='cuda:0')
     print("End")
+
+
+

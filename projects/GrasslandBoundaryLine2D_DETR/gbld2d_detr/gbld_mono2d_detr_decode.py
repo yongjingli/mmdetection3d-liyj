@@ -1,19 +1,498 @@
-# import torch
-# import torch.nn as nn
-# from mmengine.model import BaseModule
-import copy
+import torch
+import torch.nn as nn
+from mmengine.model import BaseModule
 import math
-import matplotlib.pyplot as plt
-# from mmdet3d.registry import MODELS
+from mmdet3d.registry import MODELS
 import numpy as np
 import cv2
+from scipy.spatial import distance
 from skimage import morphology
-import time
+# from mmdet.models.utils.transformer import inverse_sigmoid
+from mmcv.cnn.bricks.transformer import TransformerLayerSequence, BaseTransformerLayer
+from mmdet3d.registry import MODELS
+from .gbld_mono2d_detr_utils import inverse_sigmoid
+from mmcv.ops.multi_scale_deform_attn import multi_scale_deformable_attn_pytorch
 
-color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
-              (230, 216, 173), (128, 0, 128), (203, 192, 255), (238, 130, 238), (130, 0, 75),
-              (169, 169, 169), (0, 69, 255)]  # [纯红、纯绿、纯蓝、金色、纯黄、天蓝、紫色、粉色、紫罗兰、藏青色、深灰色、橙红色]
-
+# @TRANSFORMER_LAYER_SEQUENCE.register_module()
+# @MODELS.register_module()
+# class MapTRDecoder(TransformerLayerSequence):
+#     """Implements the decoder in DETR3D transformer.
+#     Args:
+#         return_intermediate (bool): Whether to return intermediate outputs.
+#         coder_norm_cfg (dict): Config of last normalization layer. Default：
+#             `LN`.
+#     """
+#
+#     def __init__(self, *args, return_intermediate=False, **kwargs):
+#         super(MapTRDecoder, self).__init__(*args, **kwargs)
+#         self.return_intermediate = return_intermediate
+#         self.fp16_enabled = False
+#
+#     def forward(self,
+#                 query,
+#                 *args,
+#                 reference_points=None,
+#                 reg_branches=None,
+#                 key_padding_mask=None,
+#                 **kwargs):
+#         """Forward function for `Detr3DTransformerDecoder`.
+#         Args:
+#             query (Tensor): Input query with shape
+#                 `(num_query, bs, embed_dims)`.
+#             reference_points (Tensor): The reference
+#                 points of offset. has shape
+#                 (bs, num_query, 4) when as_two_stage,
+#                 otherwise has shape ((bs, num_query, 2).
+#             reg_branch: (obj:`nn.ModuleList`): Used for
+#                 refining the regression results. Only would
+#                 be passed when with_box_refine is True,
+#                 otherwise would be passed a `None`.
+#         Returns:
+#             Tensor: Results with shape [1, num_query, bs, embed_dims] when
+#                 return_intermediate is `False`, otherwise it has shape
+#                 [num_layers, num_query, bs, embed_dims].
+#         """
+#         output = query
+#         intermediate = []
+#         intermediate_reference_points = []
+#         for lid, layer in enumerate(self.layers):
+#
+#             reference_points_input = reference_points[..., :2].unsqueeze(
+#                 2)  # BS NUM_QUERY NUM_LEVEL 2
+#             output = layer(
+#                 output,
+#                 *args,
+#                 reference_points=reference_points_input,
+#                 key_padding_mask=key_padding_mask,
+#                 **kwargs)
+#             output = output.permute(1, 0, 2)
+#
+#             if reg_branches is not None:
+#                 tmp = reg_branches[lid](output)
+#
+#                 # assert reference_points.shape[-1] == 2
+#
+#                 new_reference_points = torch.zeros_like(reference_points)
+#                 new_reference_points = tmp + inverse_sigmoid(reference_points)
+#                 # new_reference_points[..., 2:3] = tmp[
+#                 #     ..., 4:5] + inverse_sigmoid(reference_points[..., 2:3])
+#
+#                 new_reference_points = new_reference_points.sigmoid()
+#
+#                 reference_points = new_reference_points.detach()
+#
+#             output = output.permute(1, 0, 2)
+#             if self.return_intermediate:
+#                 intermediate.append(output)
+#                 intermediate_reference_points.append(reference_points)
+#
+#         if self.return_intermediate:
+#             return torch.stack(intermediate), torch.stack(
+#                 intermediate_reference_points)
+#
+#         return output, reference_points
+#
+#
+# @ATTENTION.register_module()
+# class CustomMSDeformableAttention(BaseModule):
+#     """An attention module used in Deformable-Detr.
+#
+#     `Deformable DETR: Deformable Transformers for End-to-End Object Detection.
+#     <https://arxiv.org/pdf/2010.04159.pdf>`_.
+#
+#     Args:
+#         embed_dims (int): The embedding dimension of Attention.
+#             Default: 256.
+#         num_heads (int): Parallel attention heads. Default: 64.
+#         num_levels (int): The number of feature map used in
+#             Attention. Default: 4.
+#         num_points (int): The number of sampling points for
+#             each query in each head. Default: 4.
+#         im2col_step (int): The step used in image_to_column.
+#             Default: 64.
+#         dropout (float): A Dropout layer on `inp_identity`.
+#             Default: 0.1.
+#         batch_first (bool): Key, Query and Value are shape of
+#             (batch, n, embed_dim)
+#             or (n, batch, embed_dim). Default to False.
+#         norm_cfg (dict): Config dict for normalization layer.
+#             Default: None.
+#         init_cfg (obj:`mmcv.ConfigDict`): The Config for initialization.
+#             Default: None.
+#     """
+#
+#     def __init__(self,
+#                  embed_dims=256,
+#                  num_heads=8,
+#                  num_levels=4,
+#                  num_points=4,
+#                  im2col_step=64,
+#                  dropout=0.1,
+#                  batch_first=False,
+#                  norm_cfg=None,
+#                  init_cfg=None):
+#         super().__init__(init_cfg)
+#         if embed_dims % num_heads != 0:
+#             raise ValueError(f'embed_dims must be divisible by num_heads, '
+#                              f'but got {embed_dims} and {num_heads}')
+#         dim_per_head = embed_dims // num_heads
+#         self.norm_cfg = norm_cfg
+#         self.dropout = nn.Dropout(dropout)
+#         self.batch_first = batch_first
+#         self.fp16_enabled = False
+#
+#         # you'd better set dim_per_head to a power of 2
+#         # which is more efficient in the CUDA implementation
+#         def _is_power_of_2(n):
+#             if (not isinstance(n, int)) or (n < 0):
+#                 raise ValueError(
+#                     'invalid input for _is_power_of_2: {} (type: {})'.format(
+#                         n, type(n)))
+#             return (n & (n - 1) == 0) and n != 0
+#
+#         if not _is_power_of_2(dim_per_head):
+#             warnings.warn(
+#                 "You'd better set embed_dims in "
+#                 'MultiScaleDeformAttention to make '
+#                 'the dimension of each attention head a power of 2 '
+#                 'which is more efficient in our CUDA implementation.')
+#
+#         self.im2col_step = im2col_step
+#         self.embed_dims = embed_dims
+#         self.num_levels = num_levels
+#         self.num_heads = num_heads
+#         self.num_points = num_points
+#         self.sampling_offsets = nn.Linear(
+#             embed_dims, num_heads * num_levels * num_points * 2)
+#         self.attention_weights = nn.Linear(embed_dims,
+#                                            num_heads * num_levels * num_points)
+#         self.value_proj = nn.Linear(embed_dims, embed_dims)
+#         self.output_proj = nn.Linear(embed_dims, embed_dims)
+#         self.init_weights()
+#
+#     def init_weights(self):
+#         """Default initialization for Parameters of Module."""
+#         constant_init(self.sampling_offsets, 0.)
+#         thetas = torch.arange(
+#             self.num_heads,
+#             dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
+#         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+#         grid_init = (grid_init /
+#                      grid_init.abs().max(-1, keepdim=True)[0]).view(
+#             self.num_heads, 1, 1,
+#             2).repeat(1, self.num_levels, self.num_points, 1)
+#         for i in range(self.num_points):
+#             grid_init[:, :, i, :] *= i + 1
+#
+#         self.sampling_offsets.bias.data = grid_init.view(-1)
+#         constant_init(self.attention_weights, val=0., bias=0.)
+#         xavier_init(self.value_proj, distribution='uniform', bias=0.)
+#         xavier_init(self.output_proj, distribution='uniform', bias=0.)
+#         self._is_init = True
+#
+#     @deprecated_api_warning({'residual': 'identity'},
+#                             cls_name='MultiScaleDeformableAttention')
+#     def forward(self,
+#                 query,
+#                 key=None,
+#                 value=None,
+#                 identity=None,
+#                 query_pos=None,
+#                 key_padding_mask=None,
+#                 reference_points=None,
+#                 spatial_shapes=None,
+#                 level_start_index=None,
+#                 flag='decoder',
+#                 **kwargs):
+#         """Forward Function of MultiScaleDeformAttention.
+#
+#         Args:
+#             query (Tensor): Query of Transformer with shape
+#                 (num_query, bs, embed_dims).
+#             key (Tensor): The key tensor with shape
+#                 `(num_key, bs, embed_dims)`.
+#             value (Tensor): The value tensor with shape
+#                 `(num_key, bs, embed_dims)`.
+#             identity (Tensor): The tensor used for addition, with the
+#                 same shape as `query`. Default None. If None,
+#                 `query` will be used.
+#             query_pos (Tensor): The positional encoding for `query`.
+#                 Default: None.
+#             key_pos (Tensor): The positional encoding for `key`. Default
+#                 None.
+#             reference_points (Tensor):  The normalized reference
+#                 points with shape (bs, num_query, num_levels, 2),
+#                 all elements is range in [0, 1], top-left (0,0),
+#                 bottom-right (1, 1), including padding area.
+#                 or (N, Length_{query}, num_levels, 4), add
+#                 additional two dimensions is (w, h) to
+#                 form reference boxes.
+#             key_padding_mask (Tensor): ByteTensor for `query`, with
+#                 shape [bs, num_key].
+#             spatial_shapes (Tensor): Spatial shape of features in
+#                 different levels. With shape (num_levels, 2),
+#                 last dimension represents (h, w).
+#             level_start_index (Tensor): The start index of each level.
+#                 A tensor has shape ``(num_levels, )`` and can be represented
+#                 as [0, h_0*w_0, h_0*w_0+h_1*w_1, ...].
+#
+#         Returns:
+#              Tensor: forwarded results with shape [num_query, bs, embed_dims].
+#         """
+#
+#         if value is None:
+#             value = query
+#
+#         if identity is None:
+#             identity = query
+#         if query_pos is not None:
+#             query = query + query_pos
+#         if not self.batch_first:
+#             # change to (bs, num_query ,embed_dims)
+#             query = query.permute(1, 0, 2)
+#             value = value.permute(1, 0, 2)
+#
+#         bs, num_query, _ = query.shape
+#         bs, num_value, _ = value.shape
+#         assert (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == num_value
+#
+#         value = self.value_proj(value)
+#         if key_padding_mask is not None:
+#             value = value.masked_fill(key_padding_mask[..., None], 0.0)
+#         value = value.view(bs, num_value, self.num_heads, -1)
+#
+#         sampling_offsets = self.sampling_offsets(query).view(
+#             bs, num_query, self.num_heads, self.num_levels, self.num_points, 2)
+#         attention_weights = self.attention_weights(query).view(
+#             bs, num_query, self.num_heads, self.num_levels * self.num_points)
+#         attention_weights = attention_weights.softmax(-1)
+#
+#         attention_weights = attention_weights.view(bs, num_query,
+#                                                    self.num_heads,
+#                                                    self.num_levels,
+#                                                    self.num_points)
+#         if reference_points.shape[-1] == 2:
+#             offset_normalizer = torch.stack(
+#                 [spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+#             sampling_locations = reference_points[:, :, None, :, None, :] \
+#                 + sampling_offsets \
+#                 / offset_normalizer[None, None, None, :, None, :]
+#         elif reference_points.shape[-1] == 4:
+#             sampling_locations = reference_points[:, :, None, :, None, :2] \
+#                 + sampling_offsets / self.num_points \
+#                 * reference_points[:, :, None, :, None, 2:] \
+#                 * 0.5
+#         else:
+#             raise ValueError(
+#                 f'Last dim of reference_points must be'
+#                 f' 2 or 4, but get {reference_points.shape[-1]} instead.')
+#         if torch.cuda.is_available() and value.is_cuda:
+#
+#             # using fp16 deformable attention is unstable because it performs many sum operations
+#             if value.dtype == torch.float16:
+#                 MultiScaleDeformableAttnFunction = MultiScaleDeformableAttnFunction_fp32
+#             else:
+#                 MultiScaleDeformableAttnFunction = MultiScaleDeformableAttnFunction_fp32
+#             output = MultiScaleDeformableAttnFunction.apply(
+#                 value, spatial_shapes, level_start_index, sampling_locations,
+#                 attention_weights, self.im2col_step)
+#         else:
+#             output = multi_scale_deformable_attn_pytorch(
+#                 value, spatial_shapes, sampling_locations, attention_weights)
+#
+#         output = self.output_proj(output)
+#
+#         if not self.batch_first:
+#             # (num_query, bs ,embed_dims)
+#             output = output.permute(1, 0, 2)
+#
+#         return self.dropout(output) + identity
+#
+#
+# # @TRANSFORMER_LAYER.register_module()
+# @MODELS.register_module()
+# class DecoupledDetrTransformerDecoderLayer(BaseTransformerLayer):
+#     """Implements decoder layer in DETR transformer.
+#     Args:
+#         attn_cfgs (list[`mmcv.ConfigDict`] | list[dict] | dict )):
+#             Configs for self_attention or cross_attention, the order
+#             should be consistent with it in `operation_order`. If it is
+#             a dict, it would be expand to the number of attention in
+#             `operation_order`.
+#         feedforward_channels (int): The hidden dimension for FFNs.
+#         ffn_dropout (float): Probability of an element to be zeroed
+#             in ffn. Default 0.0.
+#         operation_order (tuple[str]): The execution order of operation
+#             in transformer. Such as ('self_attn', 'norm', 'ffn', 'norm').
+#             Default：None
+#         act_cfg (dict): The activation config for FFNs. Default: `LN`
+#         norm_cfg (dict): Config dict for normalization layer.
+#             Default: `LN`.
+#         ffn_num_fcs (int): The number of fully-connected layers in FFNs.
+#             Default：2.
+#     """
+#
+#     def __init__(self,
+#                  attn_cfgs,
+#                  feedforward_channels,
+#                  num_vec=50,
+#                  num_pts_per_vec=20,
+#                  ffn_dropout=0.0,
+#                  operation_order=None,
+#                  act_cfg=dict(type='ReLU', inplace=True),
+#                  norm_cfg=dict(type='LN'),
+#                  ffn_num_fcs=2,
+#                  **kwargs):
+#         super(DecoupledDetrTransformerDecoderLayer, self).__init__(
+#             attn_cfgs=attn_cfgs,
+#             feedforward_channels=feedforward_channels,
+#             ffn_dropout=ffn_dropout,
+#             operation_order=operation_order,
+#             act_cfg=act_cfg,
+#             norm_cfg=norm_cfg,
+#             ffn_num_fcs=ffn_num_fcs,
+#             **kwargs)
+#         assert len(operation_order) == 8
+#         assert set(operation_order) == set(
+#             ['self_attn', 'norm', 'cross_attn', 'ffn'])
+#
+#         self.num_vec = num_vec
+#         self.num_pts_per_vec = num_pts_per_vec
+#
+#     def forward(self,
+#                 query,
+#                 key=None,
+#                 value=None,
+#                 query_pos=None,
+#                 key_pos=None,
+#                 attn_masks=None,
+#                 query_key_padding_mask=None,
+#                 key_padding_mask=None,
+#                 **kwargs):
+#         """Forward function for `TransformerDecoderLayer`.
+#         **kwargs contains some specific arguments of attentions.
+#         Args:
+#             query (Tensor): The input query with shape
+#                 [num_queries, bs, embed_dims] if
+#                 self.batch_first is False, else
+#                 [bs, num_queries embed_dims].
+#             key (Tensor): The key tensor with shape [num_keys, bs,
+#                 embed_dims] if self.batch_first is False, else
+#                 [bs, num_keys, embed_dims] .
+#             value (Tensor): The value tensor with same shape as `key`.
+#             query_pos (Tensor): The positional encoding for `query`.
+#                 Default: None.
+#             key_pos (Tensor): The positional encoding for `key`.
+#                 Default: None.
+#             attn_masks (List[Tensor] | None): 2D Tensor used in
+#                 calculation of corresponding attention. The length of
+#                 it should equal to the number of `attention` in
+#                 `operation_order`. Default: None.
+#             query_key_padding_mask (Tensor): ByteTensor for `query`, with
+#                 shape [bs, num_queries]. Only used in `self_attn` layer.
+#                 Defaults to None.
+#             key_padding_mask (Tensor): ByteTensor for `query`, with
+#                 shape [bs, num_keys]. Default: None.
+#         Returns:
+#             Tensor: forwarded results with shape [num_queries, bs, embed_dims].
+#         """
+#
+#         norm_index = 0
+#         attn_index = 0
+#         ffn_index = 0
+#         identity = query
+#         if attn_masks is None:
+#             attn_masks = [None for _ in range(self.num_attn)]
+#         elif isinstance(attn_masks, torch.Tensor):
+#             attn_masks = [
+#                 copy.deepcopy(attn_masks) for _ in range(self.num_attn)
+#             ]
+#             warnings.warn(f'Use same attn_mask in all attentions in '
+#                           f'{self.__class__.__name__} ')
+#         else:
+#             assert len(attn_masks) == self.num_attn, f'The length of ' \
+#                                                      f'attn_masks {len(attn_masks)} must be equal ' \
+#                                                      f'to the number of attention in ' \
+#                                                      f'operation_order {self.num_attn}'
+#         #
+#         num_vec = kwargs['num_vec']
+#         num_pts_per_vec = kwargs['num_pts_per_vec']
+#         for layer in self.operation_order:
+#             if layer == 'self_attn':
+#                 # import ipdb;ipdb.set_trace()
+#                 if attn_index == 0:
+#                     n_pts, n_batch, n_dim = query.shape
+#                     query = query.view(num_vec, num_pts_per_vec, n_batch, n_dim).flatten(1, 2)
+#                     query_pos = query_pos.view(num_vec, num_pts_per_vec, n_batch, n_dim).flatten(1, 2)
+#                     temp_key = temp_value = query
+#                     query = self.attentions[attn_index](
+#                         query,
+#                         temp_key,
+#                         temp_value,
+#                         identity if self.pre_norm else None,
+#                         query_pos=query_pos,
+#                         key_pos=query_pos,
+#                         attn_mask=kwargs['self_attn_mask'],
+#                         key_padding_mask=query_key_padding_mask,
+#                         **kwargs)
+#                     # import ipdb;ipdb.set_trace()
+#                     query = query.view(num_vec, num_pts_per_vec, n_batch, n_dim).flatten(0, 1)
+#                     query_pos = query_pos.view(num_vec, num_pts_per_vec, n_batch, n_dim).flatten(0, 1)
+#                     attn_index += 1
+#                     identity = query
+#                 else:
+#                     # import ipdb;ipdb.set_trace()
+#                     n_pts, n_batch, n_dim = query.shape
+#                     query = query.view(num_vec, num_pts_per_vec, n_batch, n_dim).permute(1, 0, 2,
+#                                                                                          3).contiguous().flatten(1, 2)
+#                     query_pos = query_pos.view(num_vec, num_pts_per_vec, n_batch, n_dim).permute(1, 0, 2,
+#                                                                                                  3).contiguous().flatten(
+#                         1, 2)
+#                     temp_key = temp_value = query
+#                     query = self.attentions[attn_index](
+#                         query,
+#                         temp_key,
+#                         temp_value,
+#                         identity if self.pre_norm else None,
+#                         query_pos=query_pos,
+#                         key_pos=query_pos,
+#                         attn_mask=attn_masks[attn_index],
+#                         key_padding_mask=query_key_padding_mask,
+#                         **kwargs)
+#                     # import ipdb;ipdb.set_trace()
+#                     query = query.view(num_pts_per_vec, num_vec, n_batch, n_dim).permute(1, 0, 2,
+#                                                                                          3).contiguous().flatten(0, 1)
+#                     query_pos = query_pos.view(num_pts_per_vec, num_vec, n_batch, n_dim).permute(1, 0, 2,
+#                                                                                                  3).contiguous().flatten(
+#                         0, 1)
+#                     attn_index += 1
+#                     identity = query
+#
+#             elif layer == 'norm':
+#                 query = self.norms[norm_index](query)
+#                 norm_index += 1
+#
+#             elif layer == 'cross_attn':
+#                 query = self.attentions[attn_index](
+#                     query,
+#                     key,
+#                     value,
+#                     identity if self.pre_norm else None,
+#                     query_pos=query_pos,
+#                     key_pos=key_pos,
+#                     attn_mask=attn_masks[attn_index],
+#                     key_padding_mask=key_padding_mask,
+#                     **kwargs)
+#                 attn_index += 1
+#                 identity = query
+#
+#             elif layer == 'ffn':
+#                 query = self.ffns[ffn_index](
+#                     query, identity if self.pre_norm else None)
+#                 ffn_index += 1
+#
+#         return query
+#
 
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -73,12 +552,10 @@ def remove_isolated_points(line_points):
 
 
 def compute_vertical_distance(point, selected_points):
-    # 判断与原来是否有与x相等的点, 如果没有那么将直接加入,保证x方向可以铺满
     vertical_points = [s_pnt for s_pnt in selected_points if s_pnt[0] == point[0]]
     if len(vertical_points) == 0:
         return 0
     else:
-        # 如果存在x相等的点,判断一下x相等时的最近点的距离, 这种处理会将u形的点分段
         vertical_distance = 10000
         for v_pnt in vertical_points:
             distance = abs(v_pnt[1] - point[1])
@@ -90,19 +567,15 @@ def select_function_points(selected_points, near_points):
     while len(near_points) > 0:
         added_points = []
         for n_pnt in near_points:
-            # 进行区域生长,但是在x方向不能往回生长
             for s_pnt in selected_points:
                 distance = max(abs(n_pnt[0] - s_pnt[0]), abs(n_pnt[1] - s_pnt[1]))
-                # 满足区域生长的条件,在select_points的一个点的8邻域
                 if distance == 1:
-                    # 在selected_points查找是否存在x相同的点,计算x相同的点中的垂直距离,这样的处理会将回环的断开
                     vertical_distance = compute_vertical_distance(n_pnt, selected_points)
 
                     if vertical_distance <= 1:
                         selected_points = [n_pnt] + selected_points
                         added_points.append(n_pnt)
                         break
-
         if len(added_points) == 0:
             break
         else:
@@ -171,6 +644,21 @@ def sort_points_by_min_dist(image_xs, image_ys):
 
     return indices
 
+def sort_point_by_x_and_y_direction(image_xs, image_ys):
+    # 首先按照x从小到大排序，判断线的主体方向，在x相同的位置，按照线主体方向进行排序
+    indexs = image_xs.argsort()
+    # image_xs_sort = image_xs[indexs]
+    image_ys_sort = image_ys[indexs]
+
+    # 判断线的方向主体方向
+    y_direct = image_ys_sort[0] - image_ys_sort[-1]
+    if y_direct > 0:
+        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从大到小进行排序
+        sorted_indices = np.lexsort((-image_ys, image_xs))
+    else:
+        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从小到大进行排序
+        sorted_indices = np.lexsort((image_ys, image_xs))
+    return sorted_indices
 
 def sort_point_by_x_y(image_xs, image_ys):
     # 首先按照x从小到大排序，在x相同的位置，按照与上一个x对应的y进行排序
@@ -217,24 +705,6 @@ def sort_point_by_x_y(image_xs, image_ys):
             new_indexs = new_indexs + np.array(indexs_with_same_x)[index_y_with_same_x].tolist()
     return new_indexs
 
-
-def sort_point_by_x_and_y_direction(image_xs, image_ys):
-    # 首先按照x从小到大排序，判断线的主体方向，在x相同的位置，按照线主体方向进行排序
-    indexs = image_xs.argsort()
-    # image_xs_sort = image_xs[indexs]
-    image_ys_sort = image_ys[indexs]
-
-    # 判断线的方向主体方向
-    y_direct = image_ys_sort[0] - image_ys_sort[-1]
-    if y_direct > 0:
-        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从大到小进行排序
-        sorted_indices = np.lexsort((-image_ys, image_xs))
-    else:
-        # 按照 x 坐标进行从小到大排序，在 x 相同时按照 y 坐标从小到大进行排序
-        sorted_indices = np.lexsort((image_ys, image_xs))
-    return sorted_indices
-
-
 def arrange_points_to_line(selected_points, x_map, y_map, confidence_map,
                            pred_emb_id_map, pred_cls_map, pred_orient_map=None,
                            pred_visible_map=None, pred_hanging_map=None, pred_covered_map=None,
@@ -256,6 +726,7 @@ def arrange_points_to_line(selected_points, x_map, y_map, confidence_map,
     clses = pred_cls_map[ys, xs]
 
     indices = image_xs.argsort()
+    # 首先按照x从小到大排序，判断线的主体方向，在x相同的位置，按照线主体方向进行排序
     # indices = sort_point_by_x_and_y_direction(image_xs, image_ys)
     # indices = sort_point_by_x_y(image_xs, image_ys)
 
@@ -316,15 +787,12 @@ def compute_point_distance(point_0, point_1):
     return distance
 
 
-def connect_piecewise_lines(piecewise_lines, endpoint_distance=16, grid_size=4, map_h=152, map_w=240):
+def connect_piecewise_lines(piecewise_lines, endpoint_distance=16):
     long_lines = piecewise_lines
     final_lines = []
     while len(long_lines) > 1:
-        # 选择第一条线
         current_line = long_lines[0]
         current_endpoints = [current_line[0], current_line[-1]]
-
-        # 其他线
         other_lines = long_lines[1:]
         other_endpoints = []
         for o_line in other_lines:
@@ -332,32 +800,16 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16, grid_size=4, 
             other_endpoints.append(o_line[-1])
         point_ids = [None, None]
         min_dist = 10000
-
-        # 对于选择线的两个端点, 在其他线中的所有端点, 查找与两个选择端点距离最近的距离
         for i, c_end in enumerate(current_endpoints):
             for j, o_end in enumerate(other_endpoints):
                 distance = compute_point_distance(c_end, o_end)
-                # print("c_end", c_end, o_end)
                 if distance < min_dist:
                     point_ids[0] = i
                     point_ids[1] = j
                     min_dist = distance
-
-        # 如果两个选择端点存在距离小于阈值的端点, 则两条线合并, 合并完毕后继续进行类似的合并操作
-        # print("endpoint_distance:", endpoint_distance)
-        # print("min_dist:", min_dist)
-        near_point_merge = True
-        if current_endpoints[point_ids[0]][1] > map_h * grid_size * 0.8:
-            if min_dist < endpoint_distance * 2:
-                near_point_merge = True
-
         if min_dist < endpoint_distance:
-        # 待最新的模型训练完成后看是否需要再近距离加入这个条件
-        # if min_dist < endpoint_distance or near_point_merge:
             adjacent_line = other_lines[point_ids[1] // 2]
             other_lines.remove(adjacent_line)
-
-            # 判断两条合并线的左右关系, 进行合并
             if point_ids[0] == 0 and point_ids[1] % 2 == 0:
                 adjacent_line.reverse()
                 left_line = adjacent_line
@@ -388,8 +840,6 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16, grid_size=4, 
             # best_id = best_ids[1]
             # right_line = right_line[best_id:]
             long_lines = other_lines + [left_line + right_line]
-
-        # 如果如果两个选择端点不存在距离小于阈值的端点, 给线将直接输出
         else:
             final_lines.append(current_line)
             long_lines = other_lines
@@ -399,9 +849,7 @@ def connect_piecewise_lines(piecewise_lines, endpoint_distance=16, grid_size=4, 
 
 
 def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map,
-                          pred_orient_map=None, pred_visible_map=None, pred_hanging_map=None,
-                          pred_covered_map=None):
-
+                          pred_orient_map=None, pred_visible_map=None, pred_hanging_map=None, pred_covered_map=None):
     existing_points = single_line.copy()
     piecewise_lines = []
     while len(existing_points) > 0:
@@ -415,8 +863,6 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
                 selected_points.append(e_pnt)
             else:
                 alternative_points.append(e_pnt)
-
-        # 在y方向进行延伸
         y -= 1
         while len(alternative_points) > 0:
             near_points, far_points = [], []
@@ -426,34 +872,22 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
                 else:
                     far_points.append(a_pnt)
 
-            # 如果y-1后没有near_points, 输出线段
             if len(near_points) == 0:
                 break
 
-            # 计算near_points与selected_points的距离, 与selected_points的中存在距离小于1的需要加上
-            #
             selected_points, outliers = select_function_points(
                 selected_points, near_points
             )
-
-            # 如果没有新的点加入, 输出线段
             if len(outliers) == len(near_points):
                 break
             else:
-                # 将远处的点和没有加入的点重新作为alternative_points
                 alternative_points = outliers + far_points
                 y -= 1
-
-        # 得到左右端点, 在原来的single_line上进行x方向的延伸判断
-        # (并非在alternative_points上进行判断,alternative_points上的点可能不是完整的点)
-        # 目前这个方法感觉就是x优先的方法,对垂直的线效果确实不是很友好
         selected_points = extend_endpoints(selected_points, single_line)
-
         piecewise_line = arrange_points_to_line(
             selected_points, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map, pred_orient_map,
             pred_visible_map, pred_hanging_map, pred_covered_map
         )
-
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
         piecewise_lines.append(piecewise_line)
         existing_points = alternative_points
@@ -463,13 +897,12 @@ def serialize_single_line(single_line, x_map, y_map, confidence_map, pred_emb_id
     elif len(piecewise_lines) == 1:
         exact_lines = piecewise_lines[0]
     else:
-
-        exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)[0]
-        # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
-
+        exact_lines = connect_piecewise_lines(piecewise_lines)[0]
+        # exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=40)[0]
     if exact_lines[0][1] < exact_lines[-1][1]:
         exact_lines.reverse()
     return exact_lines
+
 
 def split_piecewise_lines(piecewise_lines, split_dist=12):
     split_piecewise_lines = []
@@ -481,45 +914,26 @@ def split_piecewise_lines(piecewise_lines, split_dist=12):
         for j, cur_point in enumerate(raw_line[1:]):
             point_dist = compute_point_distance(pre_point, cur_point)
             if point_dist > split_dist:
-                split_piecewise_line = raw_line[start_idx:end_idx+1]
+                split_piecewise_line = raw_line[start_idx:end_idx + 1]
                 if len(split_piecewise_line) > 1:
                     split_piecewise_lines.append(split_piecewise_line)
 
-                start_idx = j + 1   # 需要加上0-index的长度
+                start_idx = j + 1  # 需要加上0-index的长度
 
             pre_point = cur_point
             end_idx = j + 1
 
             if j == len(raw_line) - 2:
-                split_piecewise_line = raw_line[start_idx:end_idx+1]
+                split_piecewise_line = raw_line[start_idx:end_idx + 1]
                 if len(split_piecewise_line) > 1:
                     split_piecewise_lines.append(split_piecewise_line)
     return split_piecewise_lines
 
 def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_map, pred_cls_map,
                           pred_orient_map=None, pred_visible_map=None, pred_hanging_map=None,
-                          pred_covered_map=None,
-                          grid_size=4,
-                          debug_existing_points=False,
-                          debug_piece_line=False,
-                          debug_exact_line=False):
+                          pred_covered_map=None):
 
     existing_points = single_line.copy()
-
-    # debug existing_points
-    if debug_existing_points:
-        img_h, img_w = x_map.shape
-        img_existing_points = np.zeros((img_h, img_w), dtype=np.uint8)
-        for existing_point in existing_points:
-            x, y = int(existing_point[0]), int(existing_point[1])
-            img_existing_points[y, x] = 1
-
-        plt.imshow(img_existing_points)
-        plt.title("img_existing_points")
-        # plt.show()
-        plt.show(block = True)
-        plt.close('all')
-
     piecewise_lines = []
     while len(existing_points) > 0:
         existing_points = remove_isolated_points(existing_points)
@@ -560,105 +974,26 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
             pred_visible_map, pred_hanging_map, pred_covered_map
         )
         # piecewise_line = self.fit_points_to_line(selected_points, x_map, y_map, confidence_map)  # Curve Fitting
-
         # piecewise_lines.append(piecewise_line)
-        # 将点太少的线去除 modify-liyj 2023-11-2
-        # if len(piecewise_line) > 1:
         if len(piecewise_line) > 1:
             piecewise_lines.append(piecewise_line)
 
         existing_points = alternative_points
 
     # 在这里判断是否继续对line进行分段，如果两个点的距离太大就会断开，防止两个相邻点之间的距离过大
-    # 如果是低的分辨率，这个split_dist需要进行修改
     piecewise_lines = split_piecewise_lines(piecewise_lines, split_dist=12)
-
-    # 查看每条线中线段分段情况
-    if debug_piece_line:
-        grid_size = 4
-        img_h, img_w = x_map.shape
-        img_piecewise_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
-
-        # np.savez("/home/liyongjing/Egolee/programs/mmdetection3d-liyj/local_files/debug_gbld/data/debug_pieces_points_20231116_2.npz", *piecewise_lines)
-        # exit(1)
-        for i, raw_line in enumerate(piecewise_lines):
-            if i > len(color_list)-1:
-                color = [np.random.randint(0, 255) for i in range(3)]
-            else:
-                color = color_list[i]
-
-            pre_point = raw_line[0]
-
-            for cur_point in raw_line[1:]:
-                # x, y = cur_point[:2]
-                # img_piecewise_lines[y, x] = color
-                x1, y1 = int(pre_point[0]), int(pre_point[1])
-                x2, y2 = int(cur_point[0]), int(cur_point[1])
-
-                cv2.line(img_piecewise_lines, (x1, y1), (x2, y2), color, 1, 8)
-                pre_point = cur_point
-
-            start_point = raw_line[0]
-            end_point = raw_line[-1]
-            cv2.circle(img_piecewise_lines, (int(start_point[0]), int(start_point[1])), 5, color)
-            cv2.circle(img_piecewise_lines, (int(end_point[0]), int(end_point[1])), 5, color)
-            # time.sleep(0.1)
-        # plt.subplot(2, 1, 1)
-        # plt.imshow(confidence_map > 0.2)
-        # plt.imshow(confidence_map)
-        # plt.subplot(2, 1, 2)
-        plt.imshow(img_piecewise_lines)
-        plt.title("debug_piece_line")
-        # plt.show()
-        plt.show(block=True)
-        plt.close('all')
 
     if len(piecewise_lines) == 0:
         return []
     elif len(piecewise_lines) == 1:
-        exact_lines = piecewise_lines[0]
+        # exact_lines = piecewise_lines[0]
         all_exact_lines = piecewise_lines
     else:
 
         # exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=40)[0]
         # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=30)
-        map_h, map_w = x_map.shape
-        # endpoint_distance=16
-        all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16,
-                                                  grid_size=grid_size, map_h=map_h, map_w=map_w)
-
-    if debug_exact_line:
-        grid_size = 4
-        img_h, img_w = x_map.shape
-        img_exact_lines = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
-        # for i, raw_line in enumerate([exact_lines]):
-        # print("all_exact_lines", all_exact_lines)
-        for i, raw_line in enumerate(all_exact_lines):
-            color = color_list[i]
-            pre_point = raw_line[0]
-
-            for cur_point in raw_line[1:]:
-                # x, y = cur_point[:2]
-                # img_piecewise_lines[y, x] = color
-                x1, y1 = int(pre_point[0]), int(pre_point[1])
-                x2, y2 = int(cur_point[0]), int(cur_point[1])
-
-                cv2.line(img_exact_lines, (x1, y1), (x2, y2), color, 1, 8)
-                pre_point = cur_point
-            start_point = raw_line[0]
-            end_point = raw_line[-1]
-            cv2.circle(img_exact_lines, (int(start_point[0]), int(start_point[1])), 10, color, -1)
-            cv2.circle(img_exact_lines, (int(end_point[0]), int(end_point[1])), 10, color, -1)
-
-        plt.subplot(2, 1, 1)
-        plt.imshow(confidence_map)
-        plt.subplot(2, 1, 2)
-        plt.imshow(img_exact_lines)
-        plt.title("debug_exact_line")
-        # plt.show()
-        plt.show(block=True)
-        plt.close('all')
-        # exit(1)
+        all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=16)
+        # all_exact_lines = connect_piecewise_lines(piecewise_lines, endpoint_distance=64)
 
     for all_exact_line in all_exact_lines:
         if all_exact_line[0][1] < all_exact_line[-1][1]:
@@ -667,7 +1002,6 @@ def serialize_all_lines(single_line, x_map, y_map, confidence_map, pred_emb_id_m
     # if exact_lines[0][1] < exact_lines[-1][1]:
     #     exact_lines.reverse()
     return all_exact_lines
-
 
 def split_line_points_by_cls(raw_lines, pred_cls_map):
     pred_cls_map = np.argmax(pred_cls_map, axis=0)
@@ -718,6 +1052,14 @@ def get_line_key_point(line, order, fixed):
                 start_ind = index[i]
                 continue
             # if abs(index[i] - last_ind) > 1 or i == len(index) - 1:
+            #     end_ind = last_ind
+            #     start = False
+            #     if order == 0:
+            #         keypoint.append([fixed, int((start_ind + end_ind) / 2)])
+            #     else:
+            #         keypoint.append([int((start_ind + end_ind) / 2), fixed])
+            #     start_ind = index[i]
+
             if abs(index[i] - last_ind) > 1:
                 end_ind = last_ind
                 start = False
@@ -741,6 +1083,7 @@ def get_line_key_point(line, order, fixed):
                 else:
                     keypoint.append([int((start_ind + end_ind) / 2), fixed])
                 start_ind = index[i]
+
             last_ind = index[i]
 
     return keypoint
@@ -752,8 +1095,6 @@ def get_slim_points(line, start_x, end_x, start_y, end_y, step, order):
         keypoint = get_line_key_point(line, order, x_index)
         slim_points.extend(keypoint)
     return slim_points
-
-
 
 
 def zhang_suen_thining_condiction2(x1, x2, x3, x4, x5, x6, x7, x8, x9):
@@ -865,6 +1206,7 @@ def zhang_suen_thining_points(line):
             break
     return out
 
+
 def get_slim_lines(lines):
     slim_lines = []
     for line in lines:
@@ -876,14 +1218,12 @@ def get_slim_lines(lines):
         # 采用zhang_suen骨架算法
         slim_points = zhang_suen_thining_points(line)
 
-        #
         # pixel_step = 1
         # 判断条件采用ch单边slim处理
         # x_len = xmax - xmin
         # y_len = ymax - ymin
         # ratio_len = max(x_len, y_len) / (min(x_len, y_len) + 1e-8)
-        # 修改为采用两个方向的slim操作，不考虑单边slim
-        # if ratio_len > 3 and 0:
+        # if ratio_len > 3:
         #     if x_len > y_len:
         #         order = 0
         #         slim_points = get_slim_points(slim_points, xmin, xmax, ymin, ymax, pixel_step, order)
@@ -903,20 +1243,9 @@ def get_slim_lines(lines):
         # 去除孤立的点
         # slim_points = remove_isolated_points(slim_points)
 
-        # show slim points
-        if 0:
-            img_h, img_w = 608//4, 960//4
-            img_line_slim = np.zeros((img_h, img_w), dtype=np.uint8)
-            raw_line = np.array(slim_points)
-            # raw_line = line
-            xs, ys = raw_line[:, 0], raw_line[:, 1],
-            img_line_slim[ys, xs] = 1
-
-            plt.imshow(img_line_slim)
-            plt.show()
-
         slim_lines.append(slim_points)
     return slim_lines
+
 
 def cluster_line_points_high_dim(xs, ys, emb_map, pull_margin=1.5):
     emb_map = np.transpose(emb_map, (1, 2, 0))
@@ -951,19 +1280,12 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
                         pred_orient_map=None, pred_visible_map=None,
                         pred_hanging_map=None, pred_covered_map=None,
                         discriminative_map=None,
-                        line_maximum=10,
-                        grid_size=4,
-                        debub_emb=False, debug_piece_line=False,
-                        debug_existing_points=False, debug_exact_line=False):
-
+                        line_maximum=10):
     # 采用骨架细化的方式
     # mask_map = morphology.skeletonize(mask_map)
     # mask_map = mask_map.astype(np.uint8)
 
     # 形态学闭运算
-    # plt.imshow(mask_map)
-    # plt.show()
-
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  # 定义矩形结构元素
     mask_map = mask_map.astype(np.uint8)
     mask_map = cv2.morphologyEx(mask_map, cv2.MORPH_CLOSE, kernel, iterations=1)
@@ -971,118 +1293,21 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
     ys, xs = np.nonzero(mask_map)
     ys, xs = np.flipud(ys), np.flipud(xs)   # 优先将y大的点排在前面
     ebs = embedding_map[ys, xs]
+
     raw_lines = cluster_line_points(xs, ys, ebs)
     # raw_lines = cluster_line_points_high_dim(xs, ys, discriminative_map)
-    # np.save("/home/liyongjing/Egolee/hdd-data/test_data/tmp/images/raw_lines.npy", np.array(raw_lines, dtype=object))
-    if debub_emb:
-        raw_lines_before = copy.deepcopy(raw_lines)
+
     # 聚类出来的lines是没有顺序的点击, 根据类别将点集划分为更细的点击
     raw_lines = split_line_points_by_cls(raw_lines, pred_cls_map)
 
-    if 0:
-        # np.savez("/home/liyongjing/Egolee/programs/mmdetection3d-liyj/local_files/debug_gbld/data/debug_slim_points_20231117.npy", *raw_lines)
-        # raw_lines_slim = get_slim_lines(raw_lines)
-        # exit(1)
-        img_h, img_w = x_map.shape
-        for raw_line, raw_line_slim in zip(raw_lines, raw_lines_slim):
-            img_line = np.zeros((img_h, img_w), dtype=np.uint8)
-            img_line_slim = np.zeros((img_h, img_w), dtype=np.uint8)
-
-            raw_line = np.array(raw_line)
-            xs, ys = raw_line[:, 0], raw_line[:, 1],
-            img_line[ys, xs] = 1
-
-            raw_line_slim = np.array(raw_line_slim)
-            if len(raw_line_slim) > 0:
-                xs, ys = raw_line_slim[:, 0], raw_line_slim[:, 1],
-                img_line_slim[ys, xs] = 1
-
-            plt.subplot(2, 1, 1)
-            plt.imshow(img_line)
-
-            plt.subplot(2, 1, 2)
-            plt.imshow(img_line_slim)
-            # plt.show(block=True)
-            plt.show()
-        exit(1)
-
-    if debub_emb:
-        # 查看聚类的效果
-        img_h, img_w = x_map.shape
-        img_emb_before_cls = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
-        for i, raw_line in enumerate(raw_lines_before):
-            color = color_list[i % len(color_list)]
-
-            # 将某个线段的heatmap拿出来
-            for point in raw_line:
-                x, y = point
-                # img_emb[y, x] = (i + 1) * 100
-                img_emb_before_cls[y, x] = color
-
-        img_emb = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
-        for i, raw_line in enumerate(raw_lines):
-            color = color_list[i % len(color_list)]
-
-            # 将某个线段的heatmap拿出来
-            img_heatmamp_line = np.zeros_like(confidence_map)
-            for point in raw_line:
-                x, y = point
-                # img_emb[y, x] = (i + 1) * 100
-                img_emb[y, x] = color
-                img_heatmamp_line[y, x] = confidence_map[y, x]
-        #     if i == 3:
-        #         np.save("/home/liyongjing/Downloads/20231027/img_heatmamp_line.npy", img_heatmamp_line)
-        #     plt.imshow(img_heatmamp_line)
-        #     plt.title("img_heatmamp_line")
-        #     plt.show()
-        # exit(1)
-
-
-        plt.subplot(3, 1, 1)
-        plt.imshow(mask_map)
-
-        plt.subplot(3, 1, 2)
-        plt.imshow(img_emb_before_cls)
-
-        plt.subplot(3, 1, 3)
-        plt.imshow(img_emb)
-
-        plt.title("debub_emb")
-
-
-
-        # plt.show()
-        plt.show(block=True)
-        plt.close('all')
-
-        # time.sleep(0.1)
-
-    # exit(1)
-    # np.save("/home/liyongjing/Downloads/debug/1.npy", raw_lines)
+    # 将线进行细化
     raw_lines = get_slim_lines(raw_lines)
+
     raw_lines = remove_short_lines(raw_lines)
     raw_lines = remove_far_lines(raw_lines)
 
-    #
-    # img_h, img_w = x_map.shape
-    # img_filter = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
-    # for i, raw_line in enumerate(raw_lines):
-    #     color = color_list[i]
-    #     for point in raw_line:
-    #         x, y = point
-    #         # img_emb[y, x] = (i + 1) * 100
-    #         img_filter[y, x] = color
-    #
-    # plt.subplot(2, 1, 1)
-    # plt.imshow(mask_map)
-    # plt.subplot(2, 1, 2)
-    # plt.imshow(img_filter)
-    # plt.show()
-    # exit(1)
-
     exact_lines = []
     for each_line in raw_lines:
-        # 只选择最近的single line
         # single_line = serialize_single_line(each_line, x_map, y_map,
         #                                     confidence_map, pred_emb_id,
         #                                     pred_cls_map, pred_orient_map,
@@ -1095,12 +1320,8 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
         all_lines = serialize_all_lines(each_line, x_map, y_map,
                                             confidence_map, pred_emb_id,
                                             pred_cls_map, pred_orient_map,
-                                            pred_visible_map, pred_hanging_map, pred_covered_map,
-                                            grid_size=grid_size,
-                                            debug_existing_points=debug_existing_points,
-                                            debug_piece_line=debug_piece_line,
-                                            debug_exact_line=debug_exact_line)
-
+                                            pred_visible_map, pred_hanging_map, pred_covered_map
+                                            )
         if len(all_lines) > 0:
             single_line = all_lines[0]
             if len(single_line) > 0:
@@ -1109,30 +1330,11 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
             if len(all_lines) > 1:
                 for single_line in all_lines[1:]:
                     # if len(single_line) > 45:
-                    #     exact_lines.append(single_line)
-
-                    if len(single_line) > 20:
+                    if len(single_line) > 20:   # 2023-11-15
                         exact_lines.append(single_line)
 
-    # grid_size = 4
-    # img_h, img_w = x_map.shape
-    # img_serialize = np.ones((img_h * grid_size, img_w * grid_size, 3), dtype=np.uint8) * 255
-    # for i, raw_line in enumerate(exact_lines):
-    #     color = color_list[i % len(color_list)]
-    #     for point in raw_line:
-    #         x, y = point[:2]
-    #         # img_emb[y, x] = (i + 1) * 100
-    #         img_serialize[y, x] = color
-    #
-    # plt.subplot(2, 1, 1)
-    # plt.imshow(mask_map)
-    # plt.subplot(2, 1, 2)
-    # plt.imshow(img_serialize)
-    # plt.show()
-    # exit(1)
     if len(exact_lines) == 0:
         return []
-    # line_maximum = 20
     exact_lines = sorted(exact_lines, key=lambda l: len(l), reverse=True)
     exact_lines = (
         exact_lines[: line_maximum]
@@ -1144,175 +1346,22 @@ def connect_line_points(mask_map, embedding_map, x_map, y_map,
     return exact_lines
 
 
-# 对点进行拟合
-class FitPoints2Line():
-    def __init__(self):
-        self.fit_degree = [1, 3]    # 整数, 表示拟合多项式的度
-        self.map_size = [608, 960]  # h, w
-        self.fit_margin = 5         # 下面的数据都是大概猜测出来的,需要进行验证
-        self.long_line_thresh = 50
-        self.fit_iteration = 2
-        self.fit_tolerance = 20
+@MODELS.register_module()
+class GBLDDetrDecode(BaseModule):
 
-    def fit_curve(self, image_points):
-        xs, ys = image_points
-        assert xs.size >= 2, "Too few points to fit a curve."
-        base, max_degree = self.fit_degree
-        deg = min(np.ceil(xs.size / base), max_degree)
-        coefficients = np.polyfit(xs, ys, deg)
-        polynomial = np.poly1d(coefficients)
-        fitting_ys = polynomial(xs).round().astype(np.int)
-        h, w = self.map_size
-        fitting_ys = np.clip(fitting_ys, 0, h - 1)
-        fitting_points = [xs.copy(), fitting_ys]
-        return fitting_points
-
-    def search_inflexion(self, delta_ys, image_points):
-        i_xs, i_ys = image_points
-        indices = np.nonzero(delta_ys == delta_ys.max())[0]
-        for id in indices:
-            inf_x = i_xs[id]
-            inf_y = i_ys[id]
-            vertical_number = np.logical_and(
-                i_xs > inf_x - self.fit_margin, i_xs < inf_x + self.fit_margin
-            ).sum()
-            horizontal_number = np.logical_and(
-                i_ys > inf_y - self.fit_margin, i_ys < inf_y + self.fit_margin
-            ).sum()
-            if vertical_number <= horizontal_number:
-                left_num = (i_xs <= inf_x).sum()
-                right_num = (i_xs >= inf_x).sum()
-                if left_num >= self.long_line_thresh and right_num >= self.long_line_thresh:
-                    return ["x", inf_x]
-            else:
-                left_num = (i_ys <= inf_y).sum()
-                right_num = (i_ys >= inf_y).sum()
-                if left_num >= self.long_line_thresh and right_num >= self.long_line_thresh:
-                    return ["y", inf_y]
-        return None
-
-    def split_fitting_points(self, inflexion, image_points, confidences, fitting_points):
-        axis, threshold = inflexion
-        i_xs, i_ys = image_points
-        f_xs, f_ys = fitting_points
-        if axis == "x":
-            left_mask = i_xs <= threshold
-            right_mask = i_xs >= threshold
-        else:
-            left_mask = i_ys <= threshold
-            right_mask = i_ys >= threshold
-        left_i_xs, right_i_xs = i_xs[left_mask], i_xs[right_mask]
-        if left_i_xs[0] > right_i_xs[0]:
-            left_i_xs, right_i_xs = right_i_xs, left_i_xs
-            left_mask, right_mask = right_mask, left_mask
-        left_i_ys, right_i_ys = i_ys[left_mask], i_ys[right_mask]
-        left_confs, right_confs = confidences[left_mask], confidences[right_mask]
-        left_f_xs, right_f_xs = f_xs[left_mask], f_xs[right_mask]
-        left_f_ys, right_f_ys = f_ys[left_mask], f_ys[right_mask]
-        return (
-            [left_i_xs, left_i_ys],
-            [right_i_xs, right_i_ys],
-            left_confs,
-            right_confs,
-            [left_f_xs, left_f_ys],
-            [right_f_xs, right_f_ys],
-        )
-
-    # 调用入口
-    def fit_points_to_line(self, selected_points, x_map, y_map, confidence_map):
-        selected_points = np.array(selected_points)
-        xs, ys = selected_points[:, 0], selected_points[:, 1]
-        image_xs = x_map[ys, xs]
-        image_ys = y_map[ys, xs]
-        confidences = confidence_map[ys, xs]
-        indices = image_xs.argsort()
-        image_xs = image_xs[indices]
-        image_ys = image_ys[indices]
-        confidences = confidences[indices]
-
-        image_points = [[image_xs, image_ys]]
-        confidences = [confidences]
-        need_fitting = [True]
-        fitting_points = [[]]
-
-        for iter in range(self.fit_iteration):
-            finished_image_points = []
-            finished_confidences = []
-            finished_need_fitting = []
-            finished_fitting_points = []
-            for i_pnts, confs, n_fit, f_pnts in zip(
-                image_points, confidences, need_fitting, fitting_points
-            ):
-                if n_fit == True:
-                    f_pnts = self.fit_curve(i_pnts)
-                    delta_ys = abs(f_pnts[1] - i_pnts[1])
-                    if delta_ys.max() >= self.fit_tolerance:
-                        inflexion = self.search_inflexion(delta_ys, i_pnts)
-                        if inflexion != None:
-                            (
-                                left_i_pnts,
-                                right_i_pnts,
-                                left_confs,
-                                right_confs,
-                                left_f_pnts,
-                                right_f_pnts,
-                            ) = self.split_fitting_points(inflexion, i_pnts, confs, f_pnts)
-                            finished_image_points.append(left_i_pnts)
-                            finished_image_points.append(right_i_pnts)
-                            finished_confidences.append(left_confs)
-                            finished_confidences.append(right_confs)
-                            finished_need_fitting.append(True)
-                            finished_need_fitting.append(True)
-                            finished_fitting_points.append(left_f_pnts)
-                            finished_fitting_points.append(right_f_pnts)
-                        else:
-                            finished_image_points.append(i_pnts)
-                            finished_confidences.append(confs)
-                            finished_need_fitting.append(False)
-                            finished_fitting_points.append(f_pnts)
-                    else:
-                        finished_image_points.append(i_pnts)
-                        finished_confidences.append(confs)
-                        finished_need_fitting.append(False)
-                        finished_fitting_points.append(f_pnts)
-                else:
-                    finished_image_points.append(i_pnts)
-                    finished_confidences.append(confs)
-                    finished_need_fitting.append(n_fit)
-                    finished_fitting_points.append(f_pnts)
-            image_points = finished_image_points
-            confidences = finished_confidences
-            need_fitting = finished_need_fitting
-            fitting_points = finished_fitting_points
-        final_line = []
-        for i, (f_pnts, confs) in enumerate(zip(fitting_points, confidences)):
-            f_xs, f_ys = f_pnts
-            for j, pnt in enumerate(zip(f_xs, f_ys, confs)):
-                if i >= 1 and j == 0:
-                    last_pnt = final_line.pop()
-                    pnt = (pnt[0], (0.5 * (pnt[1] + last_pnt[1])).round().astype(np.int), pnt[2])
-                final_line.append(pnt)
-        return final_line
-
-
-# @MODELS.register_module()
-# class GlasslandBoundaryLine2DDecode(BaseModule):
-class GlasslandBoundaryLine2DDecodeNumpy():
     def __init__(self,
                  confident_t,
                  grid_size=4,
                  init_cfg=dict(type='Uniform', layer='Embedding')):
-        # super().__init__(init_cfg)
+        super().__init__(init_cfg)
         self.confident_t = confident_t   # 预测seg-heatmap的阈值
         self.grid_size = grid_size
         self.line_map_range = [0, -1]    # 不进行过滤
 
-        self.debub_emb = False
-        self.debug_piece_line = False
-        self.debug_existing_points = False
-        self.debug_exact_line = False
+        self.max_pooling_col = nn.MaxPool2d((3, 1), stride=(1, 1), padding=[1, 0])
+        self.max_pooling_row = nn.MaxPool2d((1, 3), stride=(1, 1), padding=[0, 1])
+        self.max_pooling_dilate = nn.MaxPool2d([3, 3], stride=1, padding=[1, 1])  # 去锯齿
 
-        # self.noise_filter = nn.MaxPool2d([3, 1], stride=1, padding=[1, 0])  # 去锯齿
     def get_line_cls(self, exact_curse_lines_multi_cls):
         output_curse_lines_multi_cls = []
         for exact_curse_lines in exact_curse_lines_multi_cls:
@@ -1400,7 +1449,6 @@ class GlasslandBoundaryLine2DDecodeNumpy():
                             revese_num[1] = revese_num[1] + 1
 
                     pre_point = cur_point
-
                 # 判断是否需要调转顺序
                 if revese_num[0] > revese_num[1]:
                     exact_curse_line = exact_curse_line[::-1, :]
@@ -1408,35 +1456,52 @@ class GlasslandBoundaryLine2DDecodeNumpy():
             output_curse_lines_with_orient.append(lines)
         return output_curse_lines_with_orient
 
+    def heatmap_nms(self, seg_pred):
+        seg_max_pooling_col = self.max_pooling_col(seg_pred)
+        seg_max_pooling_row = self.max_pooling_row(seg_pred)
+
+        mask_col = seg_pred == seg_max_pooling_col
+        mask_row = seg_pred == seg_max_pooling_row
+        mask = torch.bitwise_or(mask_col, mask_row)
+        seg_pred[~mask] = -1e6
+        # seg_pred[~mask_col] = -1e6
+        # seg_pred[~mask_row] = -1e6
+        # seg_pred = self.max_pooling_dilate(seg_pred)
+
+        return seg_pred
+
     def forward(self, seg_pred, offset_pred, seg_emb_pred, connect_emb_pred, cls_pred, orient_pred=None,
                 visible_pred=None, hanging_pred=None, covered_pred=None, discriminative_pred=None):
         # 对pred_confidene 进行max-pooling
-        # 应该是decode加上offset后,在进行h方向的max-pooling
-        # seg_max_pooling = self.noise_filter(seg_pred)
-        # mask = seg_pred == seg_max_pooling
-        # seg_pred[~mask] = -1e6
+        # seg_pred = self.heatmap_nms(seg_pred)
 
-        # seg_pred = seg_pred.cpu().detach().numpy()
-        # offset_pred = offset_pred.cpu().detach().numpy()
-        # seg_emb_pred = seg_emb_pred.cpu().detach().numpy()
-        # connect_emb_pred = connect_emb_pred.cpu().detach().numpy()
-        # cls_pred = cls_pred.cpu().detach().numpy()
+        seg_pred = seg_pred.cpu().detach().numpy()
+        offset_pred = offset_pred.cpu().detach().numpy()
+        seg_emb_pred = seg_emb_pred.cpu().detach().numpy()
+        connect_emb_pred = connect_emb_pred.cpu().detach().numpy()
+        cls_pred = cls_pred.cpu().detach().numpy()
 
-        # if orient_pred is not None:
-        #     orient_pred = orient_pred.cpu().detach().numpy()
-        #
-        # if visible_pred is not None:
-        #     visible_pred = visible_pred.cpu().detach().numpy()
-        #
-        # if hanging_pred is not None:
-        #     hanging_pred = hanging_pred.cpu().detach().numpy()
-        #
-        # if covered_pred is not None:
-        #     covered_pred = covered_pred.cpu().detach().numpy()
+
+        if orient_pred is not None:
+            orient_pred = orient_pred.cpu().detach().numpy()
+
+        if visible_pred is not None:
+            visible_pred = visible_pred.cpu().detach().numpy()
+
+        if hanging_pred is not None:
+            hanging_pred = hanging_pred.cpu().detach().numpy()
+
+        if covered_pred is not None:
+            covered_pred = covered_pred.cpu().detach().numpy()
+
+        if discriminative_pred is not None:
+            discriminative_pred = discriminative_pred.cpu().detach().numpy()
+
         curse_lines_with_cls = self.decode_curse_line(seg_pred, offset_pred[0:1],
                                                   offset_pred[1:2], seg_emb_pred, connect_emb_pred,
                                                       cls_pred, orient_pred, visible_pred,
-                                                      hanging_pred, covered_pred, discriminative_pred)
+                                                      hanging_pred, covered_pred,
+                                                      discriminative_pred)
 
         curse_lines_with_cls = self.get_line_cls(curse_lines_with_cls)
         curse_lines_with_cls = self.get_line_orient(curse_lines_with_cls)
@@ -1465,6 +1530,7 @@ class GlasslandBoundaryLine2DDecodeNumpy():
                 points = np.array(exact_curse_line)
                 poitns_cls = points[:, 4]
 
+                # 大于10个点的才会输出
                 if len(poitns_cls) > 5:
                     # 进行平滑处理
                     line_x = exact_curse_line[:, 0]
@@ -1482,6 +1548,7 @@ class GlasslandBoundaryLine2DDecodeNumpy():
 
                     if len(exact_curse_line) > 1:
                         lines.append(exact_curse_line)
+
                 # else:
                 #     lines.append(exact_curse_line)
 
@@ -1551,6 +1618,11 @@ class GlasslandBoundaryLine2DDecodeNumpy():
         mask = np.zeros_like(pred_confidence, dtype=np.bool8)
         mask[:, min_y:max_y, :] = pred_confidence[:, min_y:max_y, :] > self.confident_t
 
+        # import matplotlib.pyplot as plt
+        # plt.imshow(mask[0])
+        # plt.show()
+        # exit(1)
+
         exact_lines = []
         count = 0
         for _mask, _pred_emb, _pred_x, _pred_y, _pred_confidence, _pred_emb_id in zip(mask, pred_emb,
@@ -1560,19 +1632,9 @@ class GlasslandBoundaryLine2DDecodeNumpy():
             _exact_lines = connect_line_points(_mask, _pred_emb, _pred_x,
                                                _pred_y, _pred_confidence, _pred_emb_id,
                                                pred_cls, orient_pred, visible_pred, hanging_pred, covered_pred,
-                                               grid_size=self.grid_size,
-                                               debub_emb=self.debub_emb, debug_piece_line=self.debug_piece_line,
-                                               debug_existing_points=self.debug_existing_points,
-                                               debug_exact_line=self.debug_exact_line,
                                                discriminative_map=discriminative_pred,
                                                line_maximum=15)
 
             exact_lines.append(_exact_lines)
 
         return exact_lines
-
-
-if __name__ == "__main__":
-    print("Start")
-    glass_land_boundary_line_2d_decode_numpy = GlasslandBoundaryLine2DDecodeNumpy(confident_t=0.2)
-    print("End")

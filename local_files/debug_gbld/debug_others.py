@@ -12,6 +12,8 @@ from tabulate import tabulate
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
+from debug_utils import color_list
+
 
 
 classes = [
@@ -293,7 +295,12 @@ def format_kpi_output():
 
     # kpi_dict = {'all': [0.75, 0.77, 0.7593688362919133], 'road_boundary_line': [0.83, 0.84, 0.8344703770197487], 'bushes_boundary_line': [0.66, 0.72, 0.6881969587255613], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.8, 0.63, 0.7044025157232704], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.5, 0.51, 0.5044510385756678], 'others_boundary_line': [-1, 0.0, -1]}
     # kpi_dict = {'all': [0.88, 0.87, 0.8744717304397487], 'road_boundary_line': [0.88, 0.89, 0.884472049689441], 'bushes_boundary_line': [0.8, 0.81, 0.8044692737430169], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.89, 0.71, 0.7893816364772018], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.71, 0.54, 0.6129496402877699], 'others_boundary_line': [-1, 0.0, -1]}
-    kpi_dict = {'all': [0.9, 0.77, 0.8294434470377021], 'road_boundary_line': [0.94, 0.83, 0.8810841332580462], 'bushes_boundary_line': [0.85, 0.72, 0.779121578612349], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.94, 0.49, 0.6437456324248777], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.81, 0.4, 0.5350949628406277], 'others_boundary_line': [-1, 0.0, -1]}
+    # kpi_dict = {'all': [0.9, 0.77, 0.8294434470377021], 'road_boundary_line': [0.94, 0.83, 0.8810841332580462], 'bushes_boundary_line': [0.85, 0.72, 0.779121578612349], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.94, 0.49, 0.6437456324248777], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.81, 0.4, 0.5350949628406277], 'others_boundary_line': [-1, 0.0, -1]}
+    # 修复短线的过滤和最大线数量的限制的bug
+    # kpi_dict =  {'all': [0.89, 0.79, 0.8365258774538965], 'road_boundary_line': [0.94, 0.84, 0.8866928691746211], 'bushes_boundary_line': [0.82, 0.74, 0.7774503523382448], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.92, 0.57, 0.7034205231388331], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.73, 0.35, 0.4727104532839963], 'others_boundary_line': [0.5, 0.38, 0.43132803632236094]}
+    kpi_dict = {'all': [0.87, 0.86, 0.864471403812825], 'road_boundary_line': [0.91, 0.86, 0.8837944664031621], 'bushes_boundary_line': [0.8, 0.79, 0.7944688874921435], 'fence_boundary_line': [-1, -1, -1], 'stone_boundary_line': [0.89, 0.73, 0.8016039481801357], 'wall_boundary_line': [-1, -1, -1], 'water_boundary_line': [-1, -1, -1], 'snow_boundary_line': [-1, -1, -1], 'manhole_boundary_line': [0.63, 0.35, 0.4495412844036697], 'others_boundary_line': [0.7, 0.62, 0.6570779712339139]}
+
+
     grid_n = 20       # 控制格子的长度
     row_max_num = 5  # 控制一行里格子的最大数量
 
@@ -551,6 +558,331 @@ def debug_sort_points():
     print(y[new_indexs])
 
 
+def debug_discrimate():
+    # embedding_i = embedding_b * seg_mask_i
+    embedding_b = np.array([1, 2, 3, 4, 5, 6]).reshape(2, 3)   # 2是维度，3是个数
+    seg_mask_i = np.array([1, 0, 1])
+    embedding_i = embedding_b * seg_mask_i
+    mean_i = np.sum(embedding_i, axis=1) / np.sum(seg_mask_i)
+    print(embedding_i)
+    print(mean_i)
+
+    a = torch.randn(4, 4)
+    print(torch.sum(a, 1))
+    print(torch.sum(a))
+
+    b = a > 0.2
+    print(torch.sum(b, 1))
+    print(torch.sum(b))
+
+import torch.nn.functional as F
+def debug_emb_dist():
+    embedding_i = torch.tensor([[1, 2], [1, 3], [2, 4], [0, 0]], )
+    mean_i = torch.tensor([1, 2])
+    embed_dim = 2
+    print(embedding_i.shape)
+    print(mean_i.shape)
+
+    embedding_i = torch.transpose(embedding_i, 1, 0)
+
+    embedding_diff = embedding_i - mean_i.reshape(embed_dim, 1)
+    # [0, 0], [0, 1], [1, 2], [-1, -2], shape为[2, 4] 前面为特征维度，后面为特征个数
+    embedding_diff = embedding_diff.float()
+    emb_norm = torch.norm(embedding_diff, dim=0)   # 默认范数为2 # (1 * 1 + 2 * 2)，然后开平方
+
+    emb_norm_np = np.linalg.norm(embedding_diff.numpy(), ord=2, axis=0)
+
+    a = np.array([1, 2, -4, 6])
+    b = np.linalg.norm(a, ord=2)
+
+    delta_var = 0.5
+    # [0, 1, 2.2361, 2.2361] - 0.5 = -0.5, 0.5, 1.736, 1.736
+    # relu 后 0， 0.5， 1.736，1.736, 距离小于0.5个都loss为0
+    # 平方后0， 0.25， 3.0139， 3.0139，距离越大的放大
+    # 求平均后为1.5695
+    loss_var = torch.mean(F.relu(emb_norm - delta_var) ** 2)
+
+
+def debug_split_line_in_random_crop():
+    mask = np.array([0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0])
+    mask = mask > 0
+    line_indexs = []
+    start_indx = None
+    for i, _mask in enumerate(mask):
+        if _mask and start_indx is None:
+            start_indx = i
+        elif (not _mask) and start_indx is not None:
+            end_indx = i - 1
+            line_indexs.append((start_indx, end_indx))
+            start_indx = None
+
+        if i == len(mask) - 1:
+            end_indx = i
+            if start_indx is not None:
+                line_indexs.append((start_indx, end_indx))
+
+    print(line_indexs)
+
+def debug_sigmoid_and_sigmoid_inverse():
+    def sigmoid(x):
+        return 1 / (1 + np.exp(-x))
+
+    def sigmoid_inverse(p):
+        return np.log(p / (1 - p))
+
+    a = np.array([2, 3, 4])
+    b = sigmoid_inverse(sigmoid(a))
+    print(a, b)
+
+
+def filter_lines():
+    line_points = np.array([[0, 2], [0, 4]])
+    points_0 = line_points[:-1]
+    points_1 = line_points[1:]
+
+    points_dist = np.sqrt((points_0[:, 0] - points_1[:, 0]) ** 2
+                          + (points_0[:, 1] - points_1[:, 1]) ** 2)
+    if points_dist < 10:
+        print("Filter")
+    print(points_dist)
+
+
+def find_certain_class_data():
+    # root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231202_v0.3"
+    root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20240102_mmdet3d_spline_by_cls/train"
+    img_root = os.path.join(root, "images")
+    json_root = os.path.join(root, "jsons")
+
+    s_root = "/home/liyongjing/Downloads/debug_1"
+    for dir in ['images', 'jsons']:
+        dir_path = os.path.join(s_root, dir)
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
+        os.mkdir(dir_path)
+
+    json_names = [name for name in os.listdir(json_root) if name.endswith('.json')]
+    for json_name in tqdm(json_names, desc="json_names"):
+        img_path = os.path.join(img_root, json_name[:-5] + ".jpg")
+        json_path = os.path.join(json_root, json_name)
+        with open(json_path, "r") as fp:
+            labels = json.load(fp)
+
+        has_certain_class = False
+        for label in labels['shapes']:
+            # intersect_index = np.array(label["intersect_index"])
+            points = np.array(label["points"])
+            attr_type = np.array(label["points_type"]).reshape(-1, 1)
+            attr_visible = np.array(label["points_visible"]).reshape(-1, 1)
+            attr_hanging = np.array(label["points_hanging"]).reshape(-1, 1)
+            attr_covered = np.array(label["points_covered"]).reshape(-1, 1)
+
+            if "others_boundary_line" in attr_type:
+                has_certain_class = True
+                break
+
+        if has_certain_class:
+            dst_img_path = os.path.join(s_root, "images", json_name[:-5] + ".jpg")
+            dst_json_path = os.path.join(s_root, "jsons", json_name)
+
+            shutil.copy(img_path, dst_img_path)
+            shutil.copy(json_path, dst_json_path)
+
+
+def debug_parse_dataset_json():
+    root = os.path.join("/home/liyongjing/Downloads/debug_1")
+
+    img_root = os.path.join(root, "images")
+    label_root = os.path.join(root, "jsons")
+
+    dst_root = img_root + "_debug_vis"
+    if os.path.exists(dst_root):
+        shutil.rmtree(dst_root)
+    os.mkdir(dst_root)
+
+    down_scale = 1
+
+    img_names = [name for name in os.listdir(img_root) if name[-4:] in [".jpg", '.png']]
+    for img_name in tqdm(img_names, desc="img_names"):
+        # img_name = "1696991193.66982.jpg"
+        # img_name = "1689848745238965269.jpg"
+        # img_name = "1700108695.418044.jpg"
+        # print("img_name:", img_name)
+        img_path = os.path.join(img_root, img_name)
+        json_path = os.path.join(label_root, img_name[:-4] + ".json")
+
+        img = cv2.imread(img_path)
+        # img = np.ones_like(img) * 255
+
+        with open(json_path, "r") as fp:
+            labels = json.load(fp)
+
+        lines = []
+        all_points = []
+        all_points_type = []
+        all_points_visible = []
+        all_points_hanging = []
+        all_points_covered = []
+        lines_intersect_indexs = []
+        for label in labels["shapes"]:
+            # intersect_index = np.array(label["intersect_index"])
+
+            points = np.array(label["points"])
+            points_type = np.array(label["points_type"]).reshape(-1, 1)
+            points_visible = np.array(label["points_visible"]).reshape(-1, 1)
+            # print(points_visible)
+            points_hanging = np.array(label["points_hanging"]).reshape(-1, 1)
+            points_covered = np.array(label["points_covered"]).reshape(-1, 1)
+            # print(points.shape, attr_type.shape, attr_visible.shape, attr_hanging.shape)
+
+            line = np.concatenate([points, points_type, points_visible, points_hanging, points_covered], axis=1)
+
+            lines.append(line)
+            all_points.append(points)
+            all_points_type.append(points_type)
+            all_points_visible.append(points_visible)
+            all_points_hanging.append(points_hanging)
+            all_points_covered.append(points_covered)
+
+        # img_line = np.ones_like(img) * 255
+        img_h, img_w, img_c = img.shape
+        img_h, img_w = img_h//down_scale, img_w//down_scale
+        img = cv2.resize(img, (img_w, img_h))
+
+        img_line = np.ones((img_h, img_w, img_c), dtype=np.uint8) * 255
+        # img_line = copy.deepcopy(img)
+
+        img_cls = np.ones_like(img_line) * 255
+        img_vis = np.ones_like(img_line) * 255
+        img_hang = np.ones_like(img_line) * 255
+        img_covered = np.ones_like(img_line) * 255
+
+        line_count = 0
+
+        for points, points_type, points_visible, points_hanging, points_covered in \
+                zip(all_points, all_points_type, all_points_visible, all_points_hanging, all_points_covered):
+            # 在lines_intersect_index的首尾添加0, -1的index
+            # lines_intersect_index = lines_intersect_index.tolist()
+            # lines_intersect_index.insert(0, 0)
+            # lines_intersect_index.append(-1)
+
+            if "others_boundary_line" not in points_type:
+                continue
+
+            pre_point = points[0]
+            # color = (255, 0, 0)
+            color = (0, 0, 255)
+            for i, cur_point in enumerate(points[1:]):
+                x1, y1 = int(pre_point[0]), int(pre_point[1])
+                x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                x1, y1 = x1//down_scale, y1//down_scale
+                x2, y2 = x2//down_scale, y2//down_scale
+
+                cv2.circle(img, (x1, y1), 1, color, 1)
+                cv2.line(img, (x1, y1), (x2, y2), color, 3)
+                pre_point = cur_point
+
+            pre_point = points[0]
+            pre_point_type = points_type[0]
+            pre_point_vis = points_visible[0]
+            pre_point_hang = points_hanging[0]
+            pre_point_covered = points_covered[0]
+
+            First_Point = True
+            for cur_point, point_type, point_vis, point_hang, point_covered in zip(points[1:],
+                                                                points_type[1:],
+                                                                points_visible[1:],
+                                                                points_hanging[1:],
+                                                                points_covered[1:]):
+                if point_type not in classes:
+                    print("skip point type:", point_type)
+                    continue
+
+                # img_line
+                # color = (255, 0, 0)
+                color = color_list[line_count % len(color_list)]
+                x1, y1 = int(pre_point[0]), int(pre_point[1])
+                x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+                x1, y1 = x1 // down_scale, y1 // down_scale
+                x2, y2 = x2 // down_scale, y2 // down_scale
+
+                cv2.circle(img_line, (x1, y1), 1, color, 1)
+                cv2.line(img_line, (x1, y1), (x2, y2), color, 3)
+                if First_Point:
+                    center_point = points[len(points)//2]
+                    cv2.putText(img_line, str(line_count), (int(center_point[0]), int(center_point[1])),
+                                cv2.FONT_HERSHEY_COMPLEX, 2, (0, 0, 255), 12)
+                    First_Point = False
+
+                pre_point = cur_point
+                # 点的属性全都是字符类型
+                # img_cls
+                # A ---- B -----C
+                # A点的属性代表AB线的属性
+                # B点的属性代表BC线的属性
+                cls_index = classes.index(pre_point_type[0])
+                color = color_list[cls_index]
+                cv2.circle(img_cls, (x1, y1), 1, color, 1)
+                cv2.line(img_cls, (x1, y1), (x2, y2), color, 3)
+                pre_point_type = point_type
+
+                # img_vis
+                # 绿色为true, 蓝色为false
+                # point_vis为true的情况下为可见
+                color = (0, 255, 0) if pre_point_vis[0] == "true" else (255, 0, 0)
+                cv2.circle(img_vis, (x1, y1), 1, color, 1)
+                cv2.line(img_vis, (x1, y1), (x2, y2), color, 3)
+                pre_point_vis = point_vis
+
+                # img_hang
+                # point_hang为true的情况为悬空
+                color = (0, 255, 0) if pre_point_hang[0] == "true" else (255, 0, 0)
+                cv2.circle(img_hang, (x1, y1), 1, color, 1)
+                cv2.line(img_hang, (x1, y1), (x2, y2), color, 3)
+                pre_point_hang = point_hang
+
+                # img_covered
+                # point_covered为true的情况为被草遮挡
+                color = (0, 255, 0) if pre_point_covered[0] == "true" else (255, 0, 0)
+                cv2.circle(img_covered, (x1, y1), 1, color, 1)
+                cv2.line(img_covered, (x1, y1), (x2, y2), color, 3)
+                pre_point_covered = point_covered
+
+            line_count = line_count + 1
+
+        img_h, img_w, _ = img_line.shape
+        # img_line = cv2.resize(img_line, (img_w//4, img_h//4))
+        s_img_path = os.path.join(dst_root, img_name)
+        # cv2.imwrite(s_img_path, img_line)
+        cv2.imwrite(s_img_path, img)
+        # exit(1)
+
+
+def get_label_url():
+    img_root = "/home/liyongjing/Downloads/debug_1/images_debug_vis"
+    json_root = "/home/liyongjing/Egolee/hdd-data/data/label_datas/gbld_20231202_v0.3/json"
+
+    s_root = img_root + "_url"
+
+    if os.path.exists(s_root):
+        shutil.rmtree(s_root)
+    os.mkdir(s_root)
+
+    img_names = [name for name in os.listdir(img_root) if name.endswith('.jpg')]
+    for img_name in tqdm(img_names, desc="json_names"):
+        json_path = os.path.join(json_root, img_name[:-4] + ".json")
+        img_path = os.path.join(img_root, img_name)
+
+        with open(json_path, "r") as fp:
+            labels = json.load(fp)
+        url = labels['url']
+        s_url_path = os.path.join(s_root, img_name[:-4] + ".txt" )
+        with open(s_url_path, 'w') as fp:
+            fp.write(url)
+        exit(1)
+
+
 if __name__ == "__main__":
     print("Start")
     # test_mmdet_fpn()
@@ -583,6 +915,24 @@ if __name__ == "__main__":
     # 在循环中快速显示图像
     # debug_show_img_quick()
 
-    debug_sort_points()
+    # debug_sort_points()
+
+    # 调试discrimate聚类loss
+    # debug_discrimate()
+    # debug_emb_dist()
+
+    # 调试crop数据增强中的分段mask
+    # debug_split_line_in_random_crop()
+
+    # 调试sigmoid和sigmoid的逆操作
+    # debug_sigmoid_and_sigmoid_inverse()
+
+    # 调试曲线过滤
+    # filter_lines()
+
+    # 筛选包含特定信息的标注文件以及可视化
+    # find_certain_class_data()
+    # debug_parse_dataset_json()
+    get_label_url()
 
     print("End")

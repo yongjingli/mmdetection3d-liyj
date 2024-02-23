@@ -15,6 +15,12 @@ work_dir = './work_dirs/' + experiment_name
 # data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231031_mmdet3d_spline'
 # data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231101_mmdet3d_spline'
 # data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231110_mmdet3d_spline_by_cls'
+# overfit
+# data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231116_mmdet3d_spline_by_cls_overfit'
+# data_root = '/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231125_mmdet3d_spline_by_cls'
+
+# 过拟合调试
+# data_root = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/debug_overfit"
 
 # 服务器数据
 # data_root = '/data-hdd/liyj/data/dataset/glass_edge_overfit_20231013_mmdet3d'
@@ -28,9 +34,20 @@ work_dir = './work_dirs/' + experiment_name
 # data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231102_mmdet3d_spline'
 # data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231102_mmdet3d_spline_by_cls_by_visible'
 # data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231108_mmdet3d_spline_by_cls'
-data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231110_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231110_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231116_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231123_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231202_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231208_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231212_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231213_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231216_mmdet3d_spline_by_cls'
+# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231218_mmdet3d_spline_by_cls'
 
-# data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20231116_mmdet3d_spline_by_cls/'
+data_root = '/data-ssd2/liyj/dataset/gbld_2d/gbld_overfit_20240102_mmdet3d_spline_by_cls'
+
+# 拟合调试
+# data_root = "/data-ssd2/liyj/dataset/gbld_2d/debug_overfit"
 
 
 classes = [
@@ -54,7 +71,8 @@ test_t_iou = 0.5              # 测试时单个实例的ap阈值
 input_size = (960, 608)       # (img_w, img_h)      # 对应输入为[2880, 1860]  需要padding,在右下角
 
 # work_dir = './work_dirs/fcos3d_r101-caffe-dcn_fpn_head-gn_8xb2-1x_nus-mono3d_v1.0-min'
-
+batch_size = 8
+# batch_size = 2  # 调试
 
 # 模型部分的定义
 model = dict(
@@ -120,17 +138,21 @@ model = dict(
         type='GBLDMono2DHead',            # 设计head
         num_classes=num_classes,          # 代表类别的数量, 需要同步修改GgldLineMapsGenerate, loss_cls
         in_channels=256,                  # backbone输入的channel数
+        up_scale=1,                       # 是否对从FPN得到的特征进行上采样，大于1为需要，会对neck出来的strides进行调整
+                                          # 对GgldLineMapsGenerateV2进行相应的修改
 
         with_orient=True,                  # 是否预测点的方向
         with_visible=True,                 # 是否预测点的可见性
         with_hanging=True,                 # 是否预测点的悬空属性
         with_covered=True,                 # 是否预测点的草遮挡属性
+        with_discriminative=False,         # 是否采用discriminative的聚类方法
+        with_point_emb=False,               # 是否预测曲线端点的heatmap和emb
 
         # 选择在哪些分辨率的stages上进行预测
         # 对neck的feat进行选择,可选择在不同的分辨率上进行head的预测
         # [0]: 代表选择第一个特征,在单层进行预测,可添加为多个
         # 需同步修改strides, stage_loss_weight的数量和大小
-        # 需同步修改数据集生成中GgldLineMapsGenerate的gt_down_scales
+        # 需同步修改数据集生成中GgldLineMapsGenerate的gt_down_scales, 同时根据up_scale的数值来调整
 
         in_feat_index=[0,
                        1,
@@ -153,6 +175,7 @@ model = dict(
 
         gbld_decode=dict(
             type='GlasslandBoundaryLine2DDecode',
+            grid_size=4,             # 解析时候的下采样倍数,decode包含在head里面，对于不同的stage动态输入strides
             confident_t=0.2,),       # 超参数,seg-map的confident的阈值
 
         seg_branch=(256, ),          # 用于预测seg的heatmap
@@ -164,6 +187,10 @@ model = dict(
         visible_branch=(256,),        # 用于预测点的可见属性
         hanging_branch=(256,),        # 用于预测点的悬空属性
         covered_branch=(256,),        # 用于预测点的草遮挡属性
+        discriminative_branch=(256,),  # 采用discriminative的方式进行聚类
+
+        seg_point_branch=(256, ),          # 用于预测曲线端点seg的heatmap
+        seg_point_emb_branch=(256, ),      # 用于预测曲线端点的emb
 
         num_seg=1,                   # 预测的channel数量
         num_offset=2,
@@ -173,6 +200,10 @@ model = dict(
         num_visible=1,               # 预测可见属性
         num_hanging=1,               # 预测悬空属性
         num_covered=1,               # 预测被草遮挡属性
+        num_discriminative_emb=16,  # discriminative聚类特征的维度
+
+        num_seg_point=1,             # 预测曲线端点heatmap的channel数量
+        num_seg_point_emb=1,         # 预测曲线端点emb数量
 
         # loss
         loss_seg=dict(
@@ -181,7 +212,7 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0,
             use_dist_weight=False,  # 是否使用距离加权, y越大权重越大
-            max_dist_weight=3.0),  # 最大y的权重
+            max_dist_weight=3.0),   # 最大y的权重
 
         loss_offset=dict(
             type='GbldOffsetLoss',
@@ -223,8 +254,34 @@ model = dict(
             num_classes=1,
             loss_weight=5.0),
 
+        loss_discriminative=dict(
+            type='GbldDiscriminativeLoss',
+            delta_var=0.5,
+            delta_dist=3.0,
+            norm=2,
+            alpha=1.0,
+            beta=1.0,
+            gamma=0.001,
+            loss_weight=5.0),
+
+        loss_seg_point=dict(
+            type='GbldSegLoss',
+            focal_loss_gamma=2.0,
+            alpha=0.25,
+            loss_weight=0.5,
+            use_dist_weight=False,  # 是否使用距离加权, y越大权重越大
+            max_dist_weight=3.0),  # 最大y的权重
+
+        loss_seg_point_emb=dict(
+            type='GbldEmbLoss',
+            pull_margin=0.5,
+            push_margin=1.0,
+            loss_weight=5.0),  # 10
+
         conv_bias=True,
         dcn_on_last_conv=True),
+
+
 
     # 待处理,目的还不明确,先保留
     train_cfg=dict(
@@ -256,7 +313,7 @@ input_modality = dict(use_lidar=False, use_camera=True)
 backend_args = None
 
 train_dataloader = dict(
-    batch_size=12,
+    batch_size=batch_size,
     num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
@@ -278,8 +335,13 @@ train_dataloader = dict(
             dict(type='mmdet.LoadImageFromFile', backend_args=None),
             dict(type='GgldLoadLines', name="load_gt_lines"),
 
+            # dict(type='GgldRandomRotate', prob=0.3, angle_range=12),
+            # dict(type='GgldRandomRotate', prob=1.0, angle_range=12),      # debug
+
             # 该方法实现还有问题, TODO
+            # dict(type='GgldRandomCrop', prob=0.8, max_margin_scale=0.4, keep_ratio=True),
             dict(type='GgldRandomCrop', prob=0.5, max_margin_scale=0.4, keep_ratio=True),
+            # dict(type='GgldRandomCrop', prob=1.0, max_margin_scale=0.4, keep_ratio=True),   # debug
 
             dict(type='GgldResize', scale=input_size,
             # keep_ratio=False,
@@ -299,7 +361,12 @@ train_dataloader = dict(
 
             # gt_down_scales用来产生不同下采样倍数下的gt,需要跟head输出的分辨率保持一致和stage保持一致
             # dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4, 8, 16, 32], num_classes=num_classes),
-            dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4, 8, 16], num_classes=num_classes),
+            dict(type='GgldLineMapsGenerateV2',
+                 gt_down_scales=[4, 8, 16],   # up_scale = 2: [2, 4, 8] # up_scale = 4: [1, 2, 4]
+                 num_classes=num_classes,
+                 filter_small_line=True,      # 是否过滤断线
+                 filter_length=32,            # 过滤曲线的长度
+                 ),
             # dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4, 8], num_classes=num_classes),
             # dict(type='GgldLineMapsGenerateV2', gt_down_scales=[4], num_classes=num_classes),
 
@@ -460,7 +527,7 @@ visualizer = dict(
     classes=classes)   # None或者classes, None 为显示数据类别, classes为显示具体的类别
 
 # train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=12, val_begin=10, val_interval=1)
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=250, val_begin=30, val_interval=10)
+train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=250, val_begin=50, val_interval=20)
 val_cfg = dict(type='ValLoop')
 test_cfg = dict(type='TestLoop')
 
@@ -516,11 +583,14 @@ default_hooks = dict(
     logger=dict(type='LoggerHook', interval=50),
     param_scheduler=dict(type='ParamSchedulerHook'),
     # checkpoint=dict(type='CheckpointHook', interval=-1),
-    checkpoint=dict(type='CheckpointHook', interval=100),    # 设置保存checkpoint的间隔
+    checkpoint=dict(type='CheckpointHook', interval=50),    # 设置保存checkpoint的间隔
     sampler_seed=dict(type='DistSamplerSeedHook'),
     visualization=dict(type='Det3DVisualizationHook',
                        draw_gt=True, draw_pred=True,     # 控制可视化的内容
-                       show=False, wait_time=1)          # 控制是否显示,以及显示的间距
+                       show=False, wait_time=1),         # 控制是否显示,以及显示的间距
+    # gbld2d_transform_hook=dict(type='Gbld2DTransformHook',
+    #                            name="Gbld2DTransformHook",
+    #                            set_first_epoch=True)
 )
 env_cfg = dict(
     cudnn_benchmark=False,
@@ -531,3 +601,8 @@ log_level = 'INFO'
 load_from = None
 resume = False
 launcher = 'none'
+
+
+# 解决分布式训练报错
+# RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss. You can enable unused parameter detection by passing the keyword argument `find_unused_parameters=True` to `torch.nn.parallel.DistributedDataParallel`, and by making sure all `forward` function outputs participate in calculating loss.
+find_unused_parameters = True

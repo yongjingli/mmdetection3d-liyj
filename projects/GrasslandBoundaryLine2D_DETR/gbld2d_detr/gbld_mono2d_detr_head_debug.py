@@ -29,81 +29,20 @@ from torch.nn import functional as F
 
 
 @MODELS.register_module()
-class GBLDMono2DHead(BaseModule):
-    """Anchor-free head used in FCOS3D.
-
-    Args:
-        num_classes (int): Number of categories excluding the background
-            category.
-        in_channels (int): Number of channels in the input feature map.
-        regress_ranges (Sequence[Tuple[int, int]]): Regress range of multiple
-            level points.
-        center_sampling (bool): If true, use center sampling. Default: True.
-        center_sample_radius (float): Radius of center sampling. Default: 1.5.
-        norm_on_bbox (bool): If true, normalize the regression targets
-            with FPN strides. Default: True.
-        centerness_on_reg (bool): If true, position centerness on the
-            regress branch. Please refer to
-            https://github.com/tianzhi0549/FCOS/issues/89#issuecomment-516877042.
-            Default: True.
-        centerness_alpha (float): Parameter used to adjust the intensity
-            attenuation from the center to the periphery. Default: 2.5.
-        loss_cls (:obj:`ConfigDict` or dict): Config of classification loss.
-        loss_bbox (:obj:`ConfigDict` or dict): Config of localization loss.
-        loss_dir (:obj:`ConfigDict` or dict): Config of direction classification loss.
-        loss_attr (:obj:`ConfigDict` or dict): Config of attribute classification loss.
-        loss_centerness (:obj:`ConfigDict` or dict): Config of centerness loss.
-        norm_cfg (:obj:`ConfigDict` or dict): dictionary to construct and config norm layer.
-            Default: norm_cfg=dict(type='GN', num_groups=32, requires_grad=True).
-        centerness_branch (tuple[int]): Channels for centerness branch.
-            Default: (64, ).
-        init_cfg (:obj:`ConfigDict` or dict or list[:obj:`ConfigDict` or \
-            dict]): Initialization config dict.
-    """  # noqa: E501
-
+class GBLDDetrMono2DHead(BaseModule):
     def __init__(self,
-                 # feat
-                 num_classes: int,
                  in_channels: int,
-                 # feat_channels: int = 256,
-                 # stacked_convs: int = 4,
-                 up_scale: int = 1,                    # 是否对从FPN得到的特征进行上采样，大于1为需要
 
-                 with_orient: bool = False,
-                 with_visible: bool = False,
-                 with_hanging: bool = False,
-                 with_covered: bool = False,
-                 with_discriminative: bool = False,     # 是否采用discriminative的聚类方法
-                 with_point_emb: bool = False,          # 是否预测曲线端点的heatmap和emb
 
                  dcn_on_last_conv: bool = False,
 
                  seg_branch: Sequence[int] = (128, 64),
                  offset_branch: Sequence[int] = (128, 64),
-                 seg_emb_branch: Sequence[int] = (128, 64),
-                 connect_emb_branch: Sequence[int] = (128, 64),
-                 cls_branch: Sequence[int] = (128, 64),
-                 orient_branch: Sequence[int] = (128, 64),
-                 visible_branch: Sequence[int] = (128, 64),
-                 hanging_branch: Sequence[int] = (128, 64),
-                 covered_branch: Sequence[int] = (128, 64),
-                 discriminative_branch: Sequence[int] = (128, 64),
-
-                 seg_point_branch: Sequence[int] = (128, 64),
-                 seg_point_emb_branch: Sequence[int] = (128, 64),
 
                  num_seg: int = 1,
                  num_offset: int = 2,
-                 num_seg_emb: int = 1,
-                 num_connect_emb: int = 1,
-                 num_orient: int = 2,
-                 num_visible: int = 1,
-                 num_hanging: int = 1,
-                 num_covered: int = 1,
-                 num_discriminative_emb: int = 128,
 
-                 num_seg_point: int = 1,
-                 num_seg_point_emb: int = 1,
+
 
                  conv_bias: Union[bool, str] = 'auto',
                  conv_cfg: OptConfigType = None,
@@ -112,9 +51,6 @@ class GBLDMono2DHead(BaseModule):
                  # predict
                  in_feat_index: Sequence[int] = (0, 1, 2, 3),
                  strides: Sequence[int] = (4, 8, 16, 32),
-                 gbld_decode: ConfigType = dict(
-                     type='mmdet.FocalLoss',
-                     confident_t=0.2),
 
                  stage_loss_weight=(1, 1, 1, 1),    # 设置不同stage的loss weight
 
@@ -187,7 +123,7 @@ class GBLDMono2DHead(BaseModule):
 
                  init_cfg: OptConfigType = None,
                  **kwargs) -> None:
-        super(GBLDMono2DHead, self).__init__(init_cfg=init_cfg)
+        super(GBLDDetrMono2DHead, self).__init__(init_cfg=init_cfg)
         # 配置记录
         self.num_classes = num_classes
         self.cls_out_channels = num_classes

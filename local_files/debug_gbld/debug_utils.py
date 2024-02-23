@@ -2,7 +2,21 @@ import numpy as np
 import math
 import cv2
 import json
+import matplotlib.pyplot as plt
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import MeanShift, estimate_bandwidth
 
+
+color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
+              (230, 216, 173), (128, 0, 128), (203, 192, 255), (238, 130, 238), (130, 0, 75),
+              (169, 169, 169), (0, 69, 255)]  # [纯红、纯绿、纯蓝、金色、纯黄、天蓝、紫色、粉色、紫罗兰、藏青色、深灰色、橙红色]
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+def sigmoid_inverse(p):
+    return np.log(p / (1 - p))
 
 def cluster_line_points(xs, ys, embeddings, pull_margin=0.8):
     lines = []
@@ -576,3 +590,140 @@ def parse_ann_infov2(info: dict, classes=None) -> dict:
 
     ann_info["gt_lines"] = remap_anns
     return ann_info
+
+def cluster_line_points_high_dim(xs, ys, embeddings, pull_margin=1.5):
+    lines = []
+    embedding_means = []
+    point_numbers = []
+    for x, y, eb in zip(xs, ys, embeddings):
+        id = None
+        min_dist = 10000
+        for i, eb_mean in enumerate(embedding_means):
+            # distance = sum(abs(eb - eb_mean))
+            distance = np.linalg.norm(eb - eb_mean, ord=2)    # 求两个向量的l2范数
+            if distance < pull_margin and distance < min_dist:
+                id = i
+                min_dist = distance
+        if id == None:
+            lines.append([(x, y)])
+            embedding_means.append(eb)
+            point_numbers.append(1)
+        else:
+            lines[id].append((x, y))
+            embedding_means[id] = (embedding_means[id] * point_numbers[id] + eb) / (
+                point_numbers[id] + 1
+            )
+            point_numbers[id] += 1
+    return lines
+
+
+def discriminative_cluster_postprocess(seg_map, cluster_map):
+    plt.imshow(seg_map)
+    plt.show()
+    embed_dim, img_h, img_w = cluster_map.shape
+    cluster_map = np.transpose(cluster_map, (1, 2, 0))
+
+    # mean-shift
+    # show_cluster_map_mean_shift = np.zeros((img_h, img_w), dtype=np.uint8)
+    # cluster_list = cluster_map[seg_map]
+    # # mean_shift = MeanShift(bandwidth=1.5, bin_seeding=True, n_jobs=-1)
+    # mean_shift = MeanShift(bandwidth=2.0, bin_seeding=True, n_jobs=-1)
+    # mean_shift.fit(cluster_list)
+    #
+    # labels = mean_shift.labels_
+    # print("mean_shift:", np.unique(labels))
+    # show_cluster_map_mean_shift[seg_map] = labels + 1
+    #
+    # show_cluster_map_mean_shift2 = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
+    #
+    # for i, label in enumerate(np.unique(labels) + 1):
+    #     label_mask = show_cluster_map_mean_shift==(label)
+    #     show_cluster_map_mean_shift2[label_mask, :] = color_list[i]
+    #
+    # plt.imshow(show_cluster_map_mean_shift2)
+    # plt.title("show_cluster_map_mean_shift2")
+    # plt.show()
+
+    # local shift
+    show_cluster_map_local = np.ones((img_h, img_w, 3), dtype=np.uint8) * 255
+    ys, xs = np.nonzero(seg_map)
+    ys, xs = np.flipud(ys), np.flipud(xs)   # 优先将y大的点排在前面
+    ebs = cluster_map[ys, xs]
+    lines = cluster_line_points_high_dim(xs, ys, ebs)
+
+    for i, line in enumerate(lines):
+        line = np.array(line)
+        x, y = line[:, 0], line[:, 1]
+        show_cluster_map_local[y, x, :] = color_list[i % len(color_list)]
+
+    plt.imshow(show_cluster_map_local)
+    plt.title("show_cluster_map_local")
+    plt.show()
+    print(len(lines))
+    exit(1)
+
+
+
+def draw_pred_result_numpy(img_show, single_stage_result):
+    # stages_result = results.pred_instances.stages_result[0]
+    # meta_info = results.metainfo
+    # batch_input_shape = meta_info["batch_input_shape"]
+    #
+    # pred_line_map = np.zeros(batch_input_shape, dtype=np.uint8)
+    # single_stage_result = stages_result[0]
+    thickness = 1
+    color = (0, 0, 255)
+
+    for curve_line in single_stage_result:
+        curve_line = np.array(curve_line)
+
+        pre_point = curve_line[0]
+        line_cls = pre_point[4]
+        # color = color_list[int(line_cls)]
+        # x1, y1 = int(pre_point[0]), int(pre_point[1])
+
+        point_num = len(curve_line)
+        for i, cur_point in enumerate(curve_line[1:]):
+            x1, y1 = int(pre_point[0]), int(pre_point[1])
+            x2, y2 = int(cur_point[0]), int(cur_point[1])
+
+            # cv2.line(pred_line_map, (x1, y1), (x2, y2), (1), thickness, 8)
+            cv2.line(img_show, (x1, y1), (x2, y2), color, thickness, 8)
+
+            line_orient = cal_points_orient(pre_point, cur_point)
+
+            if i % 40 == 0:
+                orient = pre_point[5]
+                if orient != -1:
+                    reverse = False  # 代表反向是否反了
+                    orient_diff = abs(line_orient - orient)
+                    if orient_diff > 180:
+                        orient_diff = 360 - orient_diff
+
+                    if orient_diff > 90:
+                        reverse = True
+
+                    # color = (0, 255, 0)
+                    # if reverse:
+                    #     color = (0, 0, 255)
+
+                    # 绘制预测的方向
+                    # 转个90度,指向草地
+                    orient = orient + 90
+                    if orient > 360:
+                        orient = orient - 360
+
+                    # img_show = draw_orient(img_show, pre_point, orient, arrow_len=30, color=color)
+
+            if i == point_num // 2:
+                line_orient = line_orient + 90
+                if line_orient > 360:
+                    line_orient = line_orient - 360
+                img_show = draw_orient(img_show, pre_point, line_orient, arrow_len=50, color=color)
+
+            pre_point = cur_point
+    # plt.imshow(img_show[:, :, ::-1])
+    # # plt.imshow(pred_line_map)
+    # plt.show()
+    # exit(1)
+    return img_show

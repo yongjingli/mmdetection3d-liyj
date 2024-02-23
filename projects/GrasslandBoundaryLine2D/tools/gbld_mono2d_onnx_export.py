@@ -16,6 +16,7 @@ from types import MethodType
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from mmengine.dataset import Compose, pseudo_collate
+from torch.nn import functional as F
 
 
 color_list = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (10, 215, 255), (0, 255, 255),
@@ -52,6 +53,10 @@ def onnx_export(self, batch_inputs):
 
     #dir_seg_pred, dir_offset_pred, dir_seg_emb_pred, dir_connect_emb_pred, dir_cls_pred
     concat_out = torch.concat(results, dim=1)
+    up_scale = self.bbox_head.up_scale
+    if up_scale > 1:
+        concat_out = F.interpolate(concat_out, scale_factor=up_scale, mode='bilinear', align_corners=True)
+
     return concat_out
 
 
@@ -97,9 +102,40 @@ def main():
     # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231108_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/epoch_250.pth"
 
     # 20231109 gbld_20231118.onnx
-    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231116_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/gbld_config_v0.3.py"
-    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231116_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/epoch_250.pth"
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231116_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/gbld_config_v0.3.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.3_20231116_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3/epoch_250.pth"
 
+    # 20231121 gbld_discrimate_debug.onnx
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit16/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/overfit/gbld_v0.4_20231121_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_overfit16/epoch_250.pth"
+
+    # 20231121 gbld_20231128.onnx
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/release/gbld_v0.4_20231125_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_filter_by_self/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/release/gbld_v0.4_20231125_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_filter_by_self/epoch_250.pth"
+
+    # debug upscale
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_overfit/gbld_v0.4_20231201_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_debug_finnal_upscale2_line_thinkness_2/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/debug_overfit/gbld_v0.4_20231201_batch_12_with_crop_line_10_emb_weight_split_by_cls_stage3_debug_finnal_upscale2_line_thinkness_2/epoch_250.pth"
+
+    # 20231211 gbld_20231211.onnx
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231208_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231208_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/epoch_250.pth"
+
+    # 20231211 gbld_20231218.onnx
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231214_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb_increase_prob/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231214_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb_increase_prob/epoch_250.pth"
+
+    #  20231220 gbld_20231220.onnx 12-19  全量数据训练 + 行人数据 + 外边界遮挡 + 挑选corner-case数据
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231218_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/gbld_v0.4_20231218_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_no_point_emb/epoch_250.pth"
+
+    # 01-04  全量数据训练 + 行人数据 + 外边界遮挡 + 挑选corner-case数据 + rotate + discrimate16
+    # config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/normal/gbld_v0.4_20240102_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_discrimate_rotate/gbld_config_v0.4_overfit.py"
+    # checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/normal/gbld_v0.4_20240102_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter_discrimate_rotate/epoch_250.pth"
+
+    # 01-06  全量数据训练 + 行人数据 + 外边界遮挡 + 挑选corner-case数据 （去除rotate + discrimate16）
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/normal/gbld_v0.4_20240104_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter/gbld_config_v0.4_overfit.py"
+    checkpoint_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D/work_dirs/normal/gbld_v0.4_20240104_batch_24_with_crop_line_10_emb_weight_split_by_cls_stage3_length_filter/epoch_250.pth"
 
     save_root = os.path.split(config_path)[0]
 
@@ -140,7 +176,8 @@ def main():
     #         input_len = input_len * s
     #     print("output_len {}:{}".format(0, input_len))
 
-    out_path = save_root + "/" + "gbld_20231118.onnx"
+    # out_path = save_root + "/" + "gbld_20231128.onnx"
+    out_path = save_root + "/" + "gbld_20240106.onnx"
     with torch.no_grad():
         torch.onnx.export(
             model,

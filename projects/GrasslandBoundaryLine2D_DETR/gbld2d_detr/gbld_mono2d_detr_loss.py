@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from mmdet3d.registry import MODELS
 
 @MODELS.register_module()
-class GbldSegLoss(nn.Module):
+class GbldDetrSegLoss(nn.Module):
     def __init__(self,
                  focal_loss_gamma=2.0,
                  alpha=0.25,
@@ -26,7 +26,7 @@ class GbldSegLoss(nn.Module):
                 "sum".
             loss_weight (float, optional): Weight of loss. Defaults to 1.0.
         """
-        super(GbldSegLoss, self).__init__()
+        super(GbldDetrSegLoss, self).__init__()
         self.focal_loss_gamma = focal_loss_gamma        # focal_loss_gamma
         self.alpha = alpha                              # 暂时没用
         self.loss_weight = loss_weight                  # 该loss的权重
@@ -89,10 +89,10 @@ class GbldSegLoss(nn.Module):
 
 
 @MODELS.register_module()
-class GbldOffsetLoss(nn.Module):
+class GbldDetrOffsetLoss(nn.Module):
     def __init__(self,
                  loss_weight=1.0):
-        super(GbldOffsetLoss, self).__init__()
+        super(GbldDetrOffsetLoss, self).__init__()
         self.loss_weight = loss_weight
 
     def forward(self,
@@ -127,7 +127,7 @@ class GbldOffsetLoss(nn.Module):
 
 
 @MODELS.register_module()
-class GbldEmbLoss(nn.Module):
+class GbldDetrEmbLoss(nn.Module):
     def __init__(self,
                 pull_margin=0.5,
                 push_margin=1.0,
@@ -146,7 +146,7 @@ class GbldEmbLoss(nn.Module):
                 "sum".
             loss_weight (float, optional): Weight of loss. Defaults to 1.0.
         """
-        super(GbldEmbLoss, self).__init__()
+        super(GbldDetrEmbLoss, self).__init__()
         self.push_margin = push_margin
         self.pull_margin = pull_margin
         self.loss_weight = loss_weight
@@ -200,11 +200,11 @@ class GbldEmbLoss(nn.Module):
 
 
 @MODELS.register_module()
-class GbldClsLoss(nn.Module):
+class GbldDetrClsLoss(nn.Module):
     def __init__(self,
                  num_classes=1,
                  loss_weight=1.0):
-        super(GbldClsLoss, self).__init__()
+        super(GbldDetrClsLoss, self).__init__()
         self.num_classes = num_classes
         self.loss_weight = loss_weight
         self.cls_loss = torch.nn.BCELoss(reduction='none')
@@ -227,10 +227,10 @@ class GbldClsLoss(nn.Module):
 
 
 @MODELS.register_module()
-class GbldOrientLoss(nn.Module):
+class GbldDetrOrientLoss(nn.Module):
     def __init__(self,
                  loss_weight=1.0):
-        super(GbldOrientLoss, self).__init__()
+        super(GbldDetrOrientLoss, self).__init__()
         self.loss_weight = loss_weight
 
     def forward(self,
@@ -275,10 +275,10 @@ class GbldOrientLoss(nn.Module):
 # dbscan, https://zhuanlan.zhihu.com/p/77043965
 
 @MODELS.register_module()
-class GbldDiscriminativeLoss(nn.Module):
+class GbldDetrDiscriminativeLoss(nn.Module):
     def __init__(self, delta_var=0.5, delta_dist=1.5, norm=2, alpha=1.0, beta=1.0, gamma=0.001,
                  loss_weight=1.0):
-        super(GbldDiscriminativeLoss, self).__init__()
+        super(GbldDetrDiscriminativeLoss, self).__init__()
         self.delta_var = delta_var
         self.delta_dist = delta_dist
         self.norm = norm

@@ -294,6 +294,7 @@ def build_dataloader(dataloader: Union[DataLoader, Dict],
 
 def debug_dataset(cfg):
     default_scope = 'mmdet3d'
+    # default_scope = 'mmdet'
     _experiment_name = "123"
 
     from mmengine.registry import DefaultScope
@@ -305,7 +306,8 @@ def debug_dataset(cfg):
 
     from mmengine.registry import MODELS
 
-    train_dataloader = cfg.get('train_dataloader')
+    get = cfg.get('train_dataloader')
+    train_dataloader = get
     val_dataloader = cfg.get('val_dataloader')
     test_dataloader = cfg.get('test_dataloader')
     train_cfg = cfg.get('train_cfg')
@@ -324,10 +326,11 @@ def debug_dataset(cfg):
     test_related = [test_dataloader, test_cfg, test_evaluator]
 
 
-    data_loader = build_dataloader(train_dataloader)
-
     model = cfg.get('model')
     debug_model = MODELS.build(model)
+    # data_loader = build_dataloader(train_dataloader)
+    data_loader = build_dataloader(val_dataloader)
+
 
     # dataset = data_loader.dataset
 
@@ -358,9 +361,8 @@ def debug_dataset(cfg):
             loss = debug_model(data_batch["inputs"], data_batch["data_samples"],  mode="loss")
             predict = debug_model(data_batch["inputs"], data_batch["data_samples"],  mode="predict")
 
-            print(isinstance(data_batch, list))
+            # print(isinstance(data_batch, list))
             print(loss)
-
 
             # 对于每个case的label, label的数量都是不定的,所以采用list[]的形式输入程序
             # print(len(data_batch["data_samples"]))
@@ -369,7 +371,8 @@ def debug_dataset(cfg):
 
 
 if __name__ == '__main__':
-    config_path = "./projects/GrasslandBoundaryLine2D/configs/gbld_config_v0.4_overfit.py"
+    # config_path = "./projects/GrasslandBoundaryLine2D_DETR/configs/gbld_deter_config_overfit.py"
+    config_path = "/home/liyongjing/Egolee/programs/mmdetection3d-liyj/projects/GrasslandBoundaryLine2D_DETR/configs/gbld_deter_config_overfit.py"
     # 用与loss的调试,这里主要是启动程序的入口, 需要在loss的定义处打断点进行调试
     print("config_path:", config_path)
     main(config_path)

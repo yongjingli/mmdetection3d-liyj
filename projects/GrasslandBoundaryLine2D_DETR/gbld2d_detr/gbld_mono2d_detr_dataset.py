@@ -11,15 +11,10 @@ from mmdet3d.structures.bbox_3d.cam_box3d import CameraInstance3DBoxes
 from mmdet3d.datasets.det3d_dataset import Det3DDataset
 from typing import Callable, List, Optional, Set, Union
 from mmengine.dataset import BaseDataset
-
-import logging
-from mmengine.logging import print_log
 import copy
 
-
 @DATASETS.register_module()
-# class GbldMono2dDataset(Det3DDataset):
-class GbldMono2dDatasetV2(BaseDataset):
+class GbldDetrMono2dDataset(BaseDataset):
     def __init__(self,
                  data_root: str,
                  ann_file: str,
@@ -31,14 +26,12 @@ class GbldMono2dDatasetV2(BaseDataset):
                  load_eval_anns: bool = True,
                  backend_args: Optional[dict] = None,
                  **kwargs) -> None:
-
+        
         self.test_mode = test_mode
         self.load_eval_anns = load_eval_anns
         self.load_type = load_type
         self.backend_args = backend_args
         self.idx = 0
-        self.epoch = 0   # 记录到epoch的次数
-        self.epoch_count = 0   # 当前epoch的第几个样本
 
         super().__init__(
             ann_file=ann_file,
@@ -128,8 +121,9 @@ class GbldMono2dDatasetV2(BaseDataset):
         # img_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/debug_overfit/train/images/1696921603.610147.jpg"
         # ann_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/debug_overfit/train/jsons/1696921603.610147.json"
 
-        # img_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231125_mmdet3d_spline_by_cls/train/images/1700108695.418044.jpg"
-        # ann_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/gbld_overfit_20231125_mmdet3d_spline_by_cls/train/jsons/1700108695.418044.json"
+        # TODO DEBUG
+        # img_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/debug_overfit_gbld_detr/train/images/1696924422.61974.jpg"
+        # ann_path = "/home/liyongjing/Egolee/hdd-data/data/dataset/glass_lane/debug_overfit_gbld_detr/train/jsons/1696924422.61974.json"
 
         img_name = os.path.split(img_path)[-1]
         ann_name = os.path.split(ann_path)[-1]
